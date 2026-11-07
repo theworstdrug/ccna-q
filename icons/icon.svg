@@ -1,0 +1,15 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 512 512">
+  <rect width="512" height="512" rx="112" fill="#0a66c2"/>
+  <g stroke="#fff" stroke-width="22" stroke-linecap="round" fill="none">
+    <path d="M104 176 L256 120 L408 176 M104 336 L256 392 L408 336 M104 176 V336 M408 176 V336" opacity=".55"/>
+  </g>
+  <g fill="#fff">
+    <circle cx="256" cy="120" r="40"/>
+    <circle cx="104" cy="176" r="34"/>
+    <circle cx="408" cy="176" r="34"/>
+    <circle cx="104" cy="336" r="34"/>
+    <circle cx="408" cy="336" r="34"/>
+    <circle cx="256" cy="392" r="40"/>
+  </g>
+  <text x="256" y="282" text-anchor="middle" font-family="Helvetica, Arial, sans-serif" font-weight="800" font-size="88" fill="#fff">CCNA</text>
+</svg>
