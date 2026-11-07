@@ -2,7 +2,9 @@
 // `inline code`, **bold**. Every glossary term found in the text is tappable.
 // cues: Cornell-style cue questions with answers for self-quiz mode.
 
-export const LESSONS = [
+import { BOOK_LESSONS } from './booklessons.js';
+
+const TOPIC_LESSONS = [
   {
     id: 'layers', title: 'Layers and encapsulation', domain: 'fund', week: 1, book: 'Ch 2',
     body: `Every network conversation is easier to reason about when you split it into layers. The **OSI model** has seven: Physical, Data Link, Network, Transport, Session, Presentation and Application. The **TCP/IP model** the Internet actually runs on folds the top three into one Application layer, giving Link, Internet, Transport and Application.
@@ -629,4 +631,5 @@ The v1.1 blueprint includes AI. Machine learning finds patterns in data: baselin
   },
 ];
 
+export const LESSONS = [...BOOK_LESSONS, ...TOPIC_LESSONS];
 export const lessonById = id => LESSONS.find(l => l.id === id);

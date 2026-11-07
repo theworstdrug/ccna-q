@@ -4,6 +4,8 @@ import { h } from '../ui.js';
 import { db, update } from '../store.js';
 import { makeQuestion, check, QTYPES } from '../subnetq.js';
 import { todayKey } from '../ui.js';
+import { keypad } from '../keypad.js';
+import { buzz, swipe } from '../gestures.js';
 
 const TARGET = 30000;
 const DEFAULT_TYPES = ['net', 'bcast', 'first', 'last', 'hosts', 'mask', 'wild', 'fit', 'same'];
@@ -15,14 +17,16 @@ export function render(root) {
   let t0 = 0;
   let timer = null;
   let answered = false;
+  let drillCard = null;
 
   const qEl = h('div.q-text', {});
   const clock = h('div.clock', {}, '0.0s');
-  const input = h('input.input.answer', { inputmode: 'decimal', autocomplete: 'off', autocapitalize: 'off', spellcheck: 'false', placeholder: 'answer' });
+  const kp = keypad({ layout: 'ip', placeholder: 'tap to answer', onSubmit: v => (answered ? next() : submit(v)) });
+  const input = kp.el;
   const ynRow = h('div.yn', { hidden: true },
     h('button.btn.big', { onclick: () => submit('yes') }, 'Yes'),
     h('button.btn.big', { onclick: () => submit('no') }, 'No'));
-  const submitBtn = h('button.btn.big', { onclick: () => (answered ? next() : submit(input.value)) }, 'Check');
+  const submitBtn = h('button.btn.big', { onclick: () => next() }, 'Next ›');
   const feedback = h('div.feedback', {});
   const streakEl = h('div.streak', {});
   const statsEl = h('div.sub-stats', {});
@@ -58,15 +62,14 @@ export function render(root) {
     q = makeQuestion(st.types.length ? st.types : DEFAULT_TYPES, st.prefixMin, st.prefixMax);
     answered = false;
     qEl.textContent = q.q;
-    input.value = '';
-    input.className = 'input answer';
+    kp.set('');
+    kp.display.className = 'kp-display empty';
+    kp.setLayout(q.kind === 'num' ? 'dec' : 'ip');
     feedback.replaceChildren();
     const yn = q.kind === 'yn';
     ynRow.hidden = !yn;
     input.hidden = yn;
-    submitBtn.hidden = yn;
-    submitBtn.textContent = 'Check';
-    input.inputMode = q.kind === 'ip' ? 'decimal' : 'numeric';
+    submitBtn.hidden = true;
     t0 = performance.now();
     clearInterval(timer);
     timer = setInterval(() => {
@@ -74,7 +77,6 @@ export function render(root) {
       clock.textContent = `${s.toFixed(1)}s`;
       clock.classList.toggle('over', s * 1000 > TARGET);
     }, 100);
-    if (!yn) setTimeout(() => input.focus({ preventScroll: true }), 30);
   }
 
   function submit(val) {
@@ -93,22 +95,22 @@ export function render(root) {
       const mins = x.history.filter(e => e.day === todayKey()).reduce((a, e) => a + Math.min(e.ms, 120000), 0) / 60000;
       if (mins >= 10) s.plan.daily[todayKey()] = { ...(s.plan.daily[todayKey()] || {}), subnet: true };
     });
-    input.classList.add(ok ? 'ok' : 'bad');
+    kp.display.classList.add(ok ? 'ok' : 'bad');
+    buzz(ok ? 8 : 30);
+    input.hidden = true;
     feedback.replaceChildren(
       h('div.verdict' + (ok ? '.ok' : '.bad'), {}, ok ? `✓ Correct · ${(ms / 1000).toFixed(1)}s${ms > TARGET ? ' (over 30s)' : ''}` : `✗ Answer: ${q.a}`),
       h('ul.why', {}, q.why.map(l => h('li', {}, l))));
     submitBtn.hidden = false;
-    submitBtn.textContent = 'Next ›';
     ynRow.hidden = true;
     drawStreak();
     drawStats();
-    if (ok) setTimeout(() => { if (answered && document.body.contains(qEl)) submitBtn.focus({ preventScroll: true }); }, 10);
+    const cur = q;
+    if (ok) setTimeout(() => { if (answered && q === cur && document.body.contains(qEl)) next(); }, 1100);
   }
 
-  input.addEventListener('keydown', e => { if (e.key === 'Enter') { e.preventDefault(); answered ? next() : submit(input.value); } });
   const onKey = e => {
-    if (e.target === input) return;
-    if (e.key === 'Enter' && answered) { e.preventDefault(); next(); }
+    if (e.target.matches?.('input')) return;
     if (!answered && q?.kind === 'yn' && (e.key === 'y' || e.key === 'n')) submit(e.key);
   };
   document.addEventListener('keydown', onKey);
@@ -128,7 +130,7 @@ export function render(root) {
 
   root.append(
     h('header.view-head', {}, h('h1', {}, 'Subnetting'), streakEl),
-    h('section.drill', {},
+    drillCard = h('section.drill', {},
       h('div.drill-top', {}, h('span.muted.small', {}, 'Goal: under 30 s'), clock),
       qEl, input, ynRow, submitBtn, feedback),
     statsEl,
@@ -152,5 +154,6 @@ Wildcard = 255 - mask octet`)));
   drawStreak();
   drawStats();
   next();
-  return () => { clearInterval(timer); document.removeEventListener('keydown', onKey); };
+  swipe(drillCard, { follow: false, onLeft: () => { if (answered) next(); } });
+  return () => { clearInterval(timer); kp.destroy(); document.removeEventListener('keydown', onKey); };
 }

@@ -1,6 +1,6 @@
 import { h, toast, download, fmtDate } from '../ui.js';
 import { db, update, exportJson, importJson, resetAll } from '../store.js';
-import { WEEKS, CHAPTERS, MILESTONES, EXAM, weekOf, weekRange, phaseOf, parseDate, daysUntil, buildIcs } from '../data/plan.js';
+import { WEEKS, MILESTONES, EXAM, weekOf, weekRange, phaseOf, parseDate, daysUntil, buildIcs } from '../data/plan.js';
 import { checkItem, hoursBar, logHours } from './today.js';
 
 export function render(root) {
@@ -48,22 +48,8 @@ export function render(root) {
       h('td', {}, h('button.icon-btn.tiny', { 'aria-label': 'Delete', onclick: () => { update(st => st.plan.hours.splice(e.i, 1)); root.replaceChildren(); render(root); } }, '✕'))))))
       : h('p.muted.small', {}, 'No hours logged yet.')));
 
-  // book chapters
-  const chDone = CHAPTERS.filter(c => s.plan.chapters[c[0]]).length;
-  const toRead = CHAPTERS.filter(c => c[2] !== 'Skip').length;
-  root.append(h('details.panel', {},
-    h('summary', {}, h('strong', {}, 'Book chapters'), h('span.muted.small', {}, ` · ${chDone}/${toRead} done · finish by Dec 4`)),
-    h('p.muted.small', {}, 'CCNA 1 and 2 Companion Guide, 3rd Ed. Out of date as a main source; good for fundamentals.'),
-    h('ul.chapters', {}, CHAPTERS.map(([n, title, verdict, note]) => {
-      const done = !!s.plan.chapters[n];
-      return h('li' + (verdict === 'Skip' ? '.skip' : ''), {},
-        h('label.check' + (done ? '.done' : ''), {},
-          h('input', { type: 'checkbox', checked: done, disabled: verdict === 'Skip', onchange: e => { update(st => { st.plan.chapters[n] = e.target.checked; }); e.target.parentElement.classList.toggle('done', e.target.checked); } }),
-          h('span', {}, h('span.ch-n', {}, n), ` ${title} `, h('span.verdict.v-' + verdict.toLowerCase(), {}, verdict))),
-        note ? h('div.muted.small.ch-note', {}, note) : null);
-    })),
-    h('p.muted.small', {}, 'Not in the book: VLANs/trunking, inter-VLAN routing, EtherChannel, Rapid STP, OSPF, IPv6 in depth, NAT, HSRP, NTP, syslog, SNMP, QoS, SSH, port security, DHCP snooping, DAI, AAA, WPA2/3, WLCs, automation, AI. Use Jeremy\'s IT Lab and the Read tab.')));
-
+  // book chapters (tracked in the Book tab now)
+  root.append(h('a.panel.link-panel', { href: '#/book' }, h('strong', {}, '📖 Book chapters'), h('span.muted.small', {}, ' · status, page bookmark, quizzes and notes live in the Book tab ›')));
   // resources
   root.append(h('details.panel', {},
     h('summary', {}, h('strong', {}, 'Resources')),

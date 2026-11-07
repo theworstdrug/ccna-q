@@ -8,6 +8,9 @@ import { LESSONS, lessonById } from '../data/lessons.js';
 import { GLOSSARY, DOMAIN_NAMES } from '../data/glossary.js';
 import { tokenize, termsIn, getTerm, card, statusOf, sentenceAt, addCustom, allTerms } from '../terms.js';
 import { setStatus, STATUS_LABEL } from '../srs.js';
+import { CHAPTERS } from '../data/book.js';
+
+const chapterOf = id => CHAPTERS.find(c => c.lessons.includes(id));
 
 const DOMAIN_SHORT = { fund: 'Fundamentals', access: 'Access', ip: 'IP Conn.', svc: 'Services', sec: 'Security', auto: 'Automation', custom: 'Yours' };
 
@@ -33,56 +36,11 @@ function counts(ids) {
 export function render(root, [id]) {
   if (id === '_glossary') return renderGlossary(root);
   if (id) return renderReader(root, id);
-  return renderList(root);
+  location.replace('#/book');
+  return null;
 }
 
-// ---------- lesson list ----------
-
-function renderList(root) {
-  const terms = db().terms;
-  const known = GLOSSARY.filter(g => terms[g.id]?.status === 5 || terms[g.id]?.status === -1).length;
-  const learning = Object.values(terms).filter(c => c.status >= 1 && c.status <= 4).length;
-  const customs = Object.values(terms).filter(c => c.custom).length;
-
-  root.append(
-    h('header.view-head', {}, h('h1', {}, 'Read'),
-      h('div.head-actions', {},
-        h('a.btn.ghost.small', { href: '#/read/_glossary' }, 'Glossary'),
-        h('button.btn.small', { onclick: importSheet }, '+ Import'))),
-    h('section.stat-row', {},
-      stat(known, `of ${GLOSSARY.length} known`, 'known'),
-      stat(learning, 'learning', 'learning'),
-      stat(customs, 'your terms', '')),
-    h('p.hint', {}, 'Tap a highlighted term to rate it. Blue is new; yellow is learning, fading as you rate it 1→4. Tap any other word, or select a phrase, to save your own term. Learning terms go into Review.'),
-  );
-
-  const byWeek = allLessons();
-  const list = h('div.cards', {});
-  for (const l of byWeek) {
-    const ids = termsIn(l.body || l.text || '');
-    const c = counts(ids);
-    const pct = ids.length ? Math.round((c.known / ids.length) * 100) : 0;
-    const done = db().lessons[l.id]?.done;
-    list.append(h('a.card.lesson' + (done ? '.done' : ''), { href: `#/read/${encodeURIComponent(l.id)}` },
-      h('div.lesson-top', {},
-        h('span.chip.d-' + (l.domain || 'custom'), {}, DOMAIN_SHORT[l.domain] || 'Import'),
-        l.week ? h('span.muted.small', {}, `Week ${l.week}${l.book && l.book !== '—' ? ` · Book ${l.book}` : ''}`) : h('span.muted.small', {}, 'Imported'),
-        done ? h('span.done-tick', { 'aria-label': 'done' }, '✓') : null),
-      h('div.lesson-title', {}, l.title),
-      h('div.lesson-meta', {},
-        h('span.pill.s0', {}, `${c.new} new`),
-        h('span.pill.s2', {}, `${c.learning} learning`),
-        h('span.muted.small', {}, `${pct}% known`)),
-      h('div.bar', {}, h('span', { style: { width: `${pct}%` } }))));
-  }
-  root.append(list);
-}
-
-function stat(n, label, cls) {
-  return h('div.stat' + (cls ? `.${cls}` : ''), {}, h('div.stat-n', {}, n), h('div.stat-l', {}, label));
-}
-
-function importSheet() {
+export function importSheet() {
   const title = h('input.input', { placeholder: 'Title (e.g. "JITL Day 26 notes")' });
   const text = h('textarea.input', { rows: 10, placeholder: 'Paste anything: your notes, a video transcript, a Cisco doc page… CCNA terms will be highlighted automatically.' });
   const domain = h('select.input', {}, h('option', { value: '' }, 'Domain (optional)'),
@@ -104,7 +62,7 @@ function importSheet() {
 
 function renderReader(root, id) {
   const lesson = findLesson(id);
-  if (!lesson) { root.append(h('p', {}, 'Lesson not found. ', h('a', { href: '#/read' }, 'Back'))); return; }
+  if (!lesson) { root.append(h('p', {}, 'Lesson not found. ', h('a', { href: '#/book' }, 'Back'))); return; }
   update(s => { s.lessons[id] = { ...(s.lessons[id] || {}), openedAt: Date.now() }; });
   const body = lesson.body || '';
   const ids = termsIn(body);
@@ -152,8 +110,16 @@ function renderReader(root, id) {
 
   const cues = (lesson.cues || []).length ? cueBlock(lesson.cues) : null;
 
-  const idx = allLessons().findIndex(l => l.id === id);
-  const next = allLessons()[idx + 1];
+  const ch = chapterOf(id);
+  let next;
+  if (ch) {
+    const nid = ch.lessons[ch.lessons.indexOf(id) + 1];
+    next = nid ? findLesson(nid) : null;
+  } else {
+    const list = allLessons().filter(l => l.imported || !chapterOf(l.id));
+    next = list[list.findIndex(l => l.id === id) + 1];
+  }
+  const backHref = ch ? `#/book/${ch.n}` : '#/book';
 
   const finish = h('button.btn.full', {
     onclick: () => {
@@ -164,22 +130,36 @@ function renderReader(root, id) {
       });
       toast(blue.length ? `Lesson complete · ${blue.length} blue terms → Known` : 'Lesson complete');
       blue.forEach(refreshSpans);
-      if (next) setTimeout(() => { location.hash = `#/read/${encodeURIComponent(next.id)}`; }, 600);
+      setTimeout(() => { location.hash = next ? `#/read/${encodeURIComponent(next.id)}` : backHref; }, 600);
     },
-  }, 'Finish lesson: mark remaining blue as Known');
+  }, 'Finish: mark remaining blue terms Known');
+
+  const scale = () => db().settings.fontScale || 1;
+  const applyScale = () => text.style.setProperty('--fs', scale());
+  applyScale();
+  const fontBtn = d => h('button.icon-btn.font-btn', { 'aria-label': d > 0 ? 'Larger text' : 'Smaller text', onclick: () => { update(s => { s.settings.fontScale = Math.min(1.5, Math.max(0.8, Math.round((scale() + d) * 10) / 10)); }); applyScale(); } }, d > 0 ? 'A+' : 'A−');
+  const progress = h('div.read-progress', {}, h('span'));
+  const onScroll = () => {
+    const r = text.getBoundingClientRect();
+    const pct = Math.min(1, Math.max(0, (window.innerHeight - r.top) / (r.height + window.innerHeight * 0.3)));
+    progress.firstChild.style.width = `${pct * 100}%`;
+  };
+  window.addEventListener('scroll', onScroll, { passive: true });
 
   root.append(
+    progress,
     h('header.view-head.reader-head', {},
-      h('a.icon-btn', { href: '#/read', 'aria-label': 'Back' }, '‹'),
-      h('div.grow', {}, h('div.muted.small', {}, lesson.imported ? 'Imported' : `${DOMAIN_NAMES[lesson.domain] || ''}${lesson.week ? ` · Week ${lesson.week}` : ''}`),
+      h('a.icon-btn', { href: backHref, 'aria-label': 'Back' }, '‹'),
+      h('div.grow', {}, h('div.muted.small', {}, lesson.imported ? 'Imported' : ch ? `Chapter ${ch.n} · ${ch.title}` : `${DOMAIN_NAMES[lesson.domain] || ''} · beyond the book`),
         h('h1.reader-title', {}, lesson.title)),
+      fontBtn(-0.1), fontBtn(0.1),
       lesson.imported ? h('button.icon-btn', {
         'aria-label': 'Delete import',
-        onclick: () => { if (confirm('Delete this imported text?')) { update(s => { s.imports = s.imports.filter(i => i.id !== id); }); location.hash = '#/read'; } },
+        onclick: () => { if (confirm('Delete this imported text?')) { update(s => { s.imports = s.imports.filter(i => i.id !== id); }); location.hash = '#/book'; } },
       }, '🗑') : null),
     statsEl, text, phraseBtn,
     cues,
-    h('div.reader-foot', {}, finish, next ? h('a.btn.ghost.full', { href: `#/read/${encodeURIComponent(next.id)}` }, `Next: ${next.title} ›`) : null),
+    h('div.reader-foot', {}, finish, next ? h('a.btn.ghost.full', { href: `#/read/${encodeURIComponent(next.id)}` }, `Next: ${next.title} ›`) : h('a.btn.ghost.full', { href: backHref }, ch ? `Back to chapter ${ch.n} ›` : 'Back to Book ›')),
   );
 
   const onKey = e => {
@@ -188,7 +168,7 @@ function renderReader(root, id) {
     if (map[e.key] !== undefined) document.querySelector(`.status-row [data-s="${map[e.key]}"]`)?.click();
   };
   document.addEventListener('keydown', onKey);
-  return () => { document.removeEventListener('selectionchange', onSel); document.removeEventListener('keydown', onKey); };
+  return () => { document.removeEventListener('selectionchange', onSel); document.removeEventListener('keydown', onKey); window.removeEventListener('scroll', onScroll); };
 }
 
 /** Render markdown-lite body with tappable tokens. */
@@ -348,7 +328,7 @@ function renderGlossary(root) {
     onclick: e => { filter = f; chips.forEach(c => c.classList.remove('on')); e.target.classList.add('on'); draw(); },
   }, f));
   root.append(
-    h('header.view-head', {}, h('a.icon-btn', { href: '#/read', 'aria-label': 'Back' }, '‹'), h('h1.grow', {}, 'Glossary')),
+    h('header.view-head', {}, h('a.icon-btn', { href: '#/book', 'aria-label': 'Back' }, '‹'), h('h1.grow', {}, 'Glossary')),
     h('input.input.search', { type: 'search', placeholder: `Search ${allTerms().length} terms…`, oninput: e => { q = e.target.value.toLowerCase(); draw(); } }),
     h('div.chips', {}, chips),
     listEl);

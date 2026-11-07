@@ -7,6 +7,8 @@ import { isDue } from '../srs.js';
 import { QTYPES } from '../subnetq.js';
 import { LABS } from '../sim/labs.js';
 import { getTerm } from '../terms.js';
+import { CHAPTERS, BOOK_DEADLINE, readable } from '../data/book.js';
+import { bookProgress, chStatus } from './book.js';
 
 export function render(root) {
   const s = db();
@@ -21,7 +23,8 @@ export function render(root) {
 
   // ---------- header + countdown ----------
   root.append(
-    h('header.view-head', {}, h('div', {}, h('div.muted.small', {}, now.toLocaleDateString(undefined, { weekday: 'long', month: 'long', day: 'numeric' })), h('h1', {}, 'Hey sin 👋'))),
+    h('header.view-head', {}, h('div.grow', {}, h('div.muted.small', {}, now.toLocaleDateString(undefined, { weekday: 'long', month: 'long', day: 'numeric' })), h('h1', {}, 'Hey sin 👋')),
+      h('a.btn.ghost.small', { href: '#/plan' }, '📅 Plan')),
     h('section.countdown', {},
       h('div.cd', {}, h('div.cd-n', {}, Math.max(0, dExam)), h('div.cd-l', {}, 'days to exam', h('br'), h('span.muted', {}, fmtDate(parseDate(EXAM.target))))),
       h('div.cd.warn', {}, h('div.cd-n', {}, Math.max(0, dCut)), h('div.cd-l', {}, 'days left on v1.1', h('br'), h('span.muted', {}, `ends ${fmtDate(parseDate(EXAM.cutoff))}`))),
@@ -52,6 +55,9 @@ export function render(root) {
       due ? h('a.btn.small', { href: '#/review' }, `Review ${due}`) : null,
       h('a.btn.small.ghost', { href: '#/subnet' }, 'Subnet drill'),
       continueLink(s))));
+
+  // ---------- book ----------
+  root.append(bookPanel(s));
 
   // ---------- this week ----------
   if (wk >= 1 && wk <= 12) {
@@ -95,6 +101,21 @@ export function render(root) {
     root.append(h('section.panel', {}, h('h2', {}, 'Coming up'),
       h('ul.plain', {}, upcoming.map(m => h('li' + (m.big ? '.big' : ''), {}, h('strong', {}, fmtDate(parseDate(m.date))), ` · ${m.text} `, h('span.muted.small', {}, `(${daysUntil(m.date, now)}d)`))))));
   }
+}
+
+function bookPanel(s) {
+  const { done, total, reading } = bookProgress();
+  const cur = reading[0] || CHAPTERS.find(c => readable(c) && chStatus(c.n) !== 'done');
+  const left = daysUntil(BOOK_DEADLINE);
+  const q = cur ? s.quiz[cur.n] : null;
+  return h('section.panel', {},
+    h('div.panel-head', {}, h('h2', {}, '📖 The book'), h('span.muted.small', {}, `${done}/${total} chapters · ${left > 0 ? `${left}d to Dec 4` : 'deadline passed'}`)),
+    h('div.bar', {}, h('span', { style: { width: `${(done / total) * 100}%` } })),
+    cur ? h('a.ch-row.today-ch', { href: `#/book/${cur.n}` },
+      h('span.st-dot.' + chStatus(cur.n), {}, chStatus(cur.n) === 'reading' ? '◐' : ''),
+      h('div.ch-main', {}, h('div.ch-title', {}, h('span.ch-num', {}, cur.n), cur.title),
+        h('div.ch-meta', {}, h('span.verdict.v-' + cur.verdict.toLowerCase(), {}, cur.verdict), s.book[cur.n]?.page ? h('span.muted.small', {}, `p. ${s.book[cur.n].page}`) : null, q ? h('span.muted.small', {}, `quiz ${q.best}%`) : null)),
+      h('span.chev', {}, '›')) : h('p', {}, 'Book finished 🎉 Try the ', h('a', { href: '#/quiz/exam' }, 'book exam'), '.'));
 }
 
 function continueLink(s) {

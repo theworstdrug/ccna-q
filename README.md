@@ -4,18 +4,27 @@ A personal CCNA 200-301 (v1.1) study PWA. It works offline on an iPhone and on t
 
 ## What's in it
 
+It's built for the phone first, with desktop as the secondary target. Five thumb-reachable tabs:
+
 | Tab | What it does |
 |---|---|
-| **Today** | Countdown to the Jan 29 exam and the Feb 2 v1.1 cutoff, tonight's habits (Anki, review, 10 min subnetting, a lab), this week's checklist with a theory/practice hours bar, progress per exam domain, and weak topics. |
-| **Read** | LingQ-style reader. 22 original lessons follow the 12-week plan, and 230 CCNA terms are highlighted inside them. **Blue** = new, **yellow** = learning (fades as you rate 1→4), no highlight = known. Tap a term to see the definition, the sentence it came from and your note, then rate it. Tap any other word, or select a phrase, to save your own term. **Import** any text (your notes, a video transcript, a Cisco doc) and it gets highlighted too. Each lesson ends with Cornell-style cue questions. "Finish lesson" moves the remaining blue terms to Known, the same as LingQ. |
-| **Review** | Spaced repetition (SM-2-style) for every term rated 1–4. Cards alternate between term→definition and fill-in-the-blank using the sentence you found the term in. Terms graduate to Known after a 21-day interval. Leeches get flagged. |
-| **Subnet** | Unlimited drill across 11 question types, with a timer (goal: under 30 s), streaks, per-type accuracy and a block-size explanation for every answer. 10 minutes of drilling ticks off tonight's habit. |
+| **Today** | Countdowns (exam Jan 29, v1.1 cutoff Feb 2), tonight's habits, where you are in the book, this week's checklist and theory/practice hours, progress per exam domain, and weak topics. **📅 Plan** opens the full 12-week plan, milestones, hours log, `.ics` export and backup. |
+| **Book** | Follows the *CCNA 1 and 2 Companion Guide, 3rd Ed.* chapter by chapter (1–20 + App A). Each chapter has your read/skim/skip triage as a checklist, **⚠ what's out of date** in the 2003 text, a status (not started / reading / done) and a page bookmark. It links to original in-app lessons for that chapter (LingQ-style reader), a **chapter quiz**, **Cornell notes** (cues, notes, summary, plus a self-test mode), matching drills and labs, and the chapter's key terms. There's a mixed 30-question **Book exam** for the Dec 4 milestone. "Beyond the book" holds lessons for v1.1 topics the book lacks; you'll cover those with PC software. |
+| **Review** | Spaced repetition of terms you rated 1–4 while reading. Tap to reveal; swipe → good, ← again, ↑ easy. |
+| **Drills** | Tap-only quick fire with an on-screen keypad, so the phone keyboard never pops up: subnetting (timed, goal under 30 s), binary/hex conversions, port numbers, OSI layers, administrative distance, CLI modes, router memory, wildcard masks. |
 | **Lab** | A stripped-back Packet Tracer (see below). |
-| **Plan** | The 12 weeks with checkboxes, milestones, an hours log, the book-chapter triage tracker, an `.ics` export of the calendar, and backup/restore. |
+
+Reader: every CCNA term is highlighted. **Blue** = new; **yellow** = learning (fades as you rate it 1→4); no highlight = known. Tap a term to rate it. Tap any other word, or select a phrase, to save your own term. Paste in your own text with **Import**. Text size is adjustable (A−/A+).
+
+Wrong answers on quizzes and Cornell self-tests are logged to **Weak topics** automatically.
+
+Touch details: drag a sheet down to close it, swipe left/right between chapters, haptic ticks where the device supports them, and sheets that stay above the iOS keyboard.
 
 ## The mini Packet Tracer
 
-Drag PCs, 2960 switches and 4331 routers onto the canvas, cable them, then tap a device for a terminal. Link lights go green or red. A ping animates the packet along its path.
+Add PCs, 2960 switches and 4331 routers, then cable them. **Tap** a device for its terminal, **long-press** it for a menu (CLI, ports, cable from here, rename, delete), **drag** to move it, and **pinch** or drag empty space to zoom and pan. Link lights go green or red, and a ping animates the packet along its path.
+
+The terminal is built for thumbs. A row of **suggestion chips** offers the common commands for the current mode, or the valid next words for what you've typed, so you can configure a router mostly by tapping. Keys for ⏎, delete word, Tab, ?, history and `end` sit below.
 
 What the simulated IOS supports:
 
@@ -59,15 +68,18 @@ Layout:
 ```
 index.html, manifest.webmanifest, sw.js
 css/app.css
-js/app.js            router + nav
+js/app.js            router + nav + iOS keyboard handling
+js/gestures.js       swipe, long-press, drag-to-dismiss, haptics
+js/keypad.js         on-screen keypad for drills
+js/drills.js         drill generators (binary/hex, ports, OSI, AD, CLI, memory, wildcards)
 js/store.js          localStorage state, backup
 js/srs.js            statuses + SM-2 scheduler
 js/terms.js          term matcher/tokenizer for the reader
 js/subnetq.js        subnetting question generator
-js/data/             glossary, lessons, 12-week plan
-js/views/            today, read, review, subnet, lab, plan
+js/data/             glossary, book (chapters, guides, quizzes), lessons, 12-week plan
+js/views/            today, book, read, quiz, notes, review, drill, subnet, lab, plan
 js/sim/              net utils, engine (L2/L3), IOS CLI, labs
 tests/               node --test suites
 ```
 
-Adding a lesson means appending to `js/data/lessons.js`. Adding vocabulary means appending to `js/data/glossary.js`. New lessons pick up glossary terms automatically.
+Chapter lessons live in `js/data/booklessons.js` and topic lessons in `js/data/lessons.js`. Chapter guides and quizzes are in `js/data/book.js`, and vocabulary is in `js/data/glossary.js`. Lessons pick up glossary terms automatically.

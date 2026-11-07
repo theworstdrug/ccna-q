@@ -1,5 +1,7 @@
 // Tiny DOM helpers: h() element builder, bottom sheet, toast, markdown-lite.
 
+import { dragDismiss } from './gestures.js';
+
 export function h(tag, attrs = {}, ...kids) {
   const [name, ...classes] = tag.split('.');
   const el = document.createElement(name || 'div');
@@ -86,6 +88,7 @@ export function sheet(content, { onClose, tall = false, title } = {}) {
     h('div.sheet-body', {}, content));
   sheetEl = h('div.scrim', { onclick: e => { if (e.target === sheetEl) close(); } }, panel);
   document.body.append(sheetEl);
+  dragDismiss(panel.querySelector('.sheet-head'), panel, close);
   requestAnimationFrame(() => sheetEl?.classList.add('open'));
   const onKey = e => { if (e.key === 'Escape') close(); };
   document.addEventListener('keydown', onKey);

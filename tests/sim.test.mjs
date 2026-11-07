@@ -141,3 +141,19 @@ test('CLI niceties', () => {
   cli.exec('cisco');
   assert.equal(cli.prompt(), 'Core#');
 });
+
+test('suggest() offers next words for touch input', () => {
+  const n = new Net();
+  const r = n.addDevice('router');
+  const cli = new IosCli(n, r);
+  assert.ok(cli.suggest('').words.some(w => w.w === 'enable'));
+  cli.exec('enable');
+  const sh = cli.suggest('show ip ');
+  assert.equal(sh.base, 'show ip ');
+  assert.ok(sh.words.some(w => w.w === 'route'));
+  cli.exec('conf t'); cli.exec('int g0/0');
+  const ip = cli.suggest('ip address ');
+  assert.ok(ip.words.every(w => w.param));
+  assert.ok(cli.suggest('no ').words.some(w => w.w === 'shutdown'));
+  assert.ok(cli.suggest('no shutdown ').canEnd);
+});

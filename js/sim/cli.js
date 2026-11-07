@@ -702,6 +702,36 @@ export class IosCli {
     return out.length ? out : ['% Unrecognized command'];
   }
 
+  /**
+   * Next-word suggestions for touch input.
+   * Returns { base, partial, words: [{ w, desc, param }], canEnd }.
+   */
+  suggest(line) {
+    const endsSpace = line === '' || /\s$/.test(line);
+    const tokens = line.trim() ? line.trim().split(/\s+/) : [];
+    const done = endsSpace ? tokens : tokens.slice(0, -1);
+    const partial = endsSpace ? '' : tokens[tokens.length - 1].toLowerCase();
+    const base = done.length ? `${done.join(' ')} ` : '';
+    if (this.pending) return { base, partial, words: [], canEnd: false };
+    const m = done.length ? this.match(done) : { cands: this.table[this.mode] };
+    if (m.err === 'invalid' || m.err === 'ambiguous') return { base, partial, words: [], canEnd: false };
+    const i = done.length;
+    const seen = new Map();
+    let canEnd = false;
+    for (const c of m.cands || []) {
+      const ri = c.pt.indexOf('<rest>');
+      if (ri > -1 && i > ri) continue;
+      if (c.pt.length === i && ri < 0) canEnd = true;
+      const p = c.pt[i];
+      if (!p || seen.has(p)) continue;
+      if (partial && !p.startsWith('<') && !p.startsWith(partial)) continue;
+      const param = p.startsWith('<');
+      seen.set(p, { w: param ? ({ '<ip>': 'A.B.C.D', '<num>': 'number', '<if>': 'interface', '<word>': 'word', '<rest>': '…' }[p] || p) : p, desc: KW[p] || '', param });
+    }
+    const words = [...seen.values()].sort((a, b) => (a.param - b.param) || a.w.localeCompare(b.w));
+    return { base, partial, words, canEnd };
+  }
+
   complete(line) {
     const endsSpace = /\s$/.test(line);
     const tokens = line.trim() ? line.trim().split(/\s+/) : [];

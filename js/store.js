@@ -12,7 +12,11 @@ const defaults = () => ({
   plan: { checks: {}, chapters: {}, hours: [], daily: {} },
   labs: { current: 'hello', topos: {} },
   missed: [],       // weak-topic log { topic, note, at }
-  settings: { examDate: '2027-01-29', cutoff: '2027-02-02' },
+  book: {},         // chapter -> { status: todo|reading|done, page, items }
+  notes: {},        // chapter -> { cues: [{q, a}], notes, summary }
+  quiz: {},         // chapter|'exam' -> { best, last, attempts, at }
+  drills: {},       // drillId -> { n, ok, streak, best }
+  settings: { examDate: '2027-01-29', cutoff: '2027-02-02', fontScale: 1 },
 });
 
 let state = load();

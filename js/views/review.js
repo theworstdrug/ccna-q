@@ -5,6 +5,7 @@ import { db, update } from '../store.js';
 import { getTerm, card } from '../terms.js';
 import { grade, isDue, ivlLabel } from '../srs.js';
 import { DOMAIN_NAMES } from '../data/glossary.js';
+import { swipe } from '../gestures.js';
 
 function cloze(ctx, term) {
   if (!ctx) return null;
@@ -106,14 +107,19 @@ function session(root, queue, label) {
             next();
           },
         }, h('span', {}, lab), practice ? null : h('small', {}, ivlLabel(c, g)))));
-    const show = h('button.btn.full.big', {
-      onclick: () => { back.hidden = false; grades.hidden = false; show.hidden = true; },
-    }, 'Show answer');
-    box.replaceChildren(h('div.flash', {},
+    const reveal = () => { back.hidden = false; grades.hidden = false; show.hidden = true; };
+    const show = h('button.btn.full.big', { onclick: reveal }, 'Show answer');
+    const flash = h('div.flash.tap', { onclick: reveal },
       h('div.muted.small', {}, `${DOMAIN_NAMES[t.domain] || 'Your term'} · status ${c.status === 5 ? 'known' : c.status}`),
       useCloze ? h('p.cloze', {}, cl) : h('h2.flash-term', {}, t.term),
       useCloze ? h('p.muted.small', {}, 'Which term fills the blank?') : h('p.muted.small', {}, 'What does it mean? Say it out loud.'),
-      back), show, grades);
+      back);
+    swipe(flash, {
+      onLeft: () => { if (!grades.hidden) grades.querySelector('.again').click(); },
+      onRight: () => { if (!grades.hidden) grades.querySelector('.good').click(); },
+      onUp: () => { if (!grades.hidden) grades.querySelector('.easy').click(); },
+    });
+    box.replaceChildren(flash, show, grades, h('p.hint.center', {}, 'Tap card to reveal · swipe → good, ← again, ↑ easy'));
   };
 
   const onKey = e => {
