@@ -78,17 +78,22 @@ if (window.visualViewport) {
   onVV();
 }
 
+// Offline cache + updates. A home-screen app on iOS rarely does a fresh launch, so also
+// check for a new version whenever the app comes back to the foreground.
 if ('serviceWorker' in navigator && location.protocol !== 'file:') {
-  navigator.serviceWorker.register('./sw.js').then(reg => {
-    reg.addEventListener('updatefound', () => {
-      const w = reg.installing;
-      w?.addEventListener('statechange', () => {
-        if (w.state === 'installed' && navigator.serviceWorker.controller) {
-          const bar = h('div.update', {}, 'A new version is ready. ',
-            h('button.btn.small', { onclick: () => location.reload() }, 'Reload'));
-          document.body.append(bar);
-        }
-      });
-    });
+  const hadController = !!navigator.serviceWorker.controller;
+  let shown = false;
+  const offerReload = () => {
+    if (shown) return;
+    shown = true;
+    document.body.append(h('div.update', {}, 'A new version is ready. ',
+      h('button.btn.small', { onclick: () => location.reload() }, 'Reload')));
+  };
+  // The new worker activates straight away (skipWaiting); when it takes over, offer a reload.
+  navigator.serviceWorker.addEventListener('controllerchange', () => { if (hadController) offerReload(); });
+  navigator.serviceWorker.register('./sw.js', { updateViaCache: 'none' }).then(reg => {
+    const check = () => reg.update().catch(() => {});
+    document.addEventListener('visibilitychange', () => { if (document.visibilityState === 'visible') check(); });
+    setInterval(check, 30 * 60 * 1000);
   }).catch(() => {});
 }
