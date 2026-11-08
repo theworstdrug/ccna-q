@@ -13,6 +13,7 @@ import { labById } from '../sim/labs.js';
 import { swipe, buzz } from '../gestures.js';
 import { termSheet, importSheet } from './read.js';
 import { nextFreePage, topicStats, markWritten, spreadLabel } from '../sync.js';
+import { openSpreadPreview } from './spreadview.js';
 
 const STATUS = ['todo', 'reading', 'done'];
 const STATUS_LABEL = { todo: 'Not started', reading: 'Reading', done: 'Done' };
@@ -147,7 +148,8 @@ function notebookPanel(c) {
           h('div.grow', {}, h('div', {}, it.title), h('div.muted.small', {}, `📍 ${it.where}`)),
           h('button.btn.small.ghost', { onclick: () => { markWritten(it); buzz(10); draw(); window.dispatchEvent(new Event('ccnaq:nav')); } }, '✓')))) : h('p.muted.small', {}, 'Nothing waiting to be written for this chapter.'),
       h('div.quick', {},
-        h('a.btn.small', { href: `#/notebook/add/${key}` }, '+ From my notebook'),
+        h('button.btn.small', { onclick: () => openSpreadPreview(key) }, '👁 Spread preview (PDF)'),
+        h('a.btn.small.ghost', { href: `#/notebook/add/${key}` }, '+ From my notebook'),
         st.pending.length > 4 ? h('a.btn.small.ghost', { href: '#/notebook/write' }, `All ${st.pending.length} items`) : null));
   };
   draw();

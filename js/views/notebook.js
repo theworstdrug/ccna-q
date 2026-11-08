@@ -9,6 +9,7 @@ import { CHAPTERS, NB_PLAN, readable } from '../data/book.js';
 import { LESSONS } from '../data/lessons.js';
 import { GLOSSARY } from '../data/glossary.js';
 import { buzz, swipe } from '../gestures.js';
+import { openSpreadPreview } from './spreadview.js';
 import {
   buildOutbox, markWritten, undoWritten, recentlyWritten, addFromPaper, recentlyAdded, topicOptions, currentTopic,
   NB_PAGES, highestPageUsed, nextFreePage,
@@ -182,6 +183,7 @@ function renderIndex(root) {
   });
   const row = (num, title, value, onSave, href, plan) => h('div.nb-row', {},
     h('a.nb-title', { href }, num != null ? h('span.ch-num', {}, num) : null, title),
+    num != null ? h('button.icon-btn.tiny.pv-btn', { 'aria-label': `Preview chapter ${num} spread`, title: 'Spread preview', onclick: () => openSpreadPreview(String(num)) }, '👁') : null,
     input(value, onSave, title, plan));
   const inBook = new Set(CHAPTERS.flatMap(c => c.lessons));
   const extra = LESSONS.filter(l => !inBook.has(l.id) && !l.chapter);

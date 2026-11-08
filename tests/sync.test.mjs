@@ -86,3 +86,34 @@ test('weekly summary and page suggestions', () => {
   assert.equal(nextFreePage(), 12);
   assert.equal(typeof hash('a'), 'string');
 });
+
+test('chapter spread preview: SVG + valid-looking PDF built from live data', async () => {
+  const { spreadContent, layout, spreadSvg, chapterPdf } = await import('../js/spread.js');
+  resetAll();
+  update(s => {
+    s.book[20] = { status: 'reading', nb: '66-71', page: '601' };
+    s.notes[20] = { cues: Array.from({ length: 30 }, (_, i) => ({ q: `Cue question number ${i} about ACL placement?`, a: 'Standard near destination, extended near source.' })), notes: '', summary: 'ACLs filter top-down, first match wins, implicit deny.' };
+    s.missed.push({ id: 'z', topic: 'Ch 20: Access Control Lists', note: 'Wildcard for /26?', pick: '0.0.0.31', answer: '0.0.0.63', ch: '20', at: 1, src: 'quiz' });
+  });
+  const c = spreadContent('20');
+  assert.equal(c.start, 66);
+  assert.equal(c.cueSource, 'yours');
+  const spreads = layout(c);
+  assert.ok(spreads.length >= 2, 'lots of cues should overflow onto another spread');
+  assert.ok(spreads.at(-1).last && !spreads[0].last);
+  const { svg, count } = spreadSvg('20', 1);
+  assert.equal(count, spreads.length);
+  assert.match(svg, /^<svg/);
+  assert.match(svg, />68</); // corner box of the second spread
+  const bytes = chapterPdf('20');
+  assert.ok(bytes instanceof Uint8Array);
+  const pdf = Array.from(bytes, b => String.fromCharCode(b)).join(''); // one char per byte
+  assert.ok(pdf.startsWith('%PDF-1.4'));
+  assert.match(pdf, /\/Count (\d+)/);
+  assert.equal(+pdf.match(/\/Count (\d+)/)[1], spreads.length + 1); // + mistake-log page
+  assert.match(pdf, /startxref\n\d+\n%%EOF/);
+  // xref offsets point at "N 0 obj"
+  const xrefAt = +pdf.match(/startxref\n(\d+)/)[1];
+  const offs = pdf.slice(xrefAt).split('\n').slice(3).filter(l => / 00000 n /.test(l)).map(l => +l.slice(0, 10));
+  offs.forEach((o, i) => assert.ok(pdf.startsWith(`${i + 1} 0 obj`, o), `object ${i + 1} offset`));
+});
