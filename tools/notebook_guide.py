@@ -238,7 +238,7 @@ def page_overview(c, n):
     y -= bh + 42
     rows = [['Pages', 'Section', 'What goes there'],
             ['1–2', 'Index', 'Topic → page number. Fill it in as you go. (Mirror in the app: Book → Notebook.)'],
-            ['3–9', 'Reference', 'pp.3–8: subnetting, ports, AD/route codes, IOS modes, "book is outdated" list, OSI chart (guide pages 5–8). p.9: your tab-colour key (guide page 8).'],
+            ['3–9', 'Reference', 'pp.3–8: subnetting, ports, AD/route codes, IOS modes, config cheat sheet, OSI chart (guide pages 5–8). p.9: your tab-colour key (guide page 8).'],
             ['10–71', 'Book chapters', 'One spread per chapter you read or skim, starting on an even page: about 3–4 pages each, 6 for Ch 8 and Ch 20. Skip chapters 4, 14 and Appendix A.'],
             ['72–135', 'Beyond the book', 'About 4 pages each: VLANs, STP, EtherChannel, OSPF, IPv6, FHRP, NAT, services, QoS, security, wireless, automation'],
             ['136–154', 'Back section', 'Work backwards: mistake log from p.154, weekly review log from p.145 (guide page 9)']]
@@ -624,7 +624,7 @@ def p2_index(r):
     idx_header(r, 1)
     r.label(2, 'FRONT')
     r.row(3, IDX_COLS, ['Reference: subnet 3 · ports 4 · AD 5', '3–5', 'Ref'])
-    r.row(4, IDX_COLS, ['IOS 6 · outdated 7 · OSI 8 · tab key 9', '6–9', 'Ref'])
+    r.row(4, IDX_COLS, ['IOS 6 · configs 7 · OSI 8 · tab key 9', '6–9', 'Ref'])
     r.label(6, 'BEYOND THE BOOK')
     for k, (t, pg, tab) in enumerate(BEYOND_PLAN):
         r.row(7 + k, IDX_COLS, [t, pg, tab])
@@ -715,20 +715,42 @@ def p6_ios(r):
         r.w_(13 + k, 0.45, f'→ {b}')
 
 
-def p7_outdated(r):
-    r.head('REF · The book is out of date')
-    cols = [0, 0.1, 0.5]
-    r.row(1, cols, ['Ch', 'Book says', 'Today / exam'], 'Sans-B', 7.8)
-    rows = [('3', 'WEP / LEAP', 'WPA2 (AES), WPA3 (SAE)'), ('3', 'straight vs crossover', 'Auto-MDIX (know the rule)'),
-            ('6', '10BASE5 / 10BASE2 coax', 'gone'), ('6', '802.1D STP', 'Rapid STP / Rapid PVST+'), ('7', 'RARP, BOOTP', 'DHCP'),
-            ('7', 'classful A / B / C', 'CIDR, any prefix'), ('8', 'subnets = 2^n − 2', '2^n (subnet zero OK)'),
-            ('10', 'ISDN, Frame Relay', 'Ethernet WAN, MPLS, SD-WAN'), ('11', 'HyperTerminal, setup', 'screen / PuTTY; say "no"'),
-            ('12', 'enable password', 'enable secret'), ('12', 'Telnet on VTY', 'SSH'), ('12', 'serial clock rate', 'not on v1.1'),
-            ('15', 'IGRP, classful RIP', 'OSPF (IGRP is gone)'), ('17', 'source quench', 'deprecated')]
-    for k, cells in enumerate(rows):
-        r.row(2 + k, cols, cells, size=7.6)
-    r.cols(cols[1:], 1, 27)
-    r.w_(17, 0.11, '(add a line each time you hit a ⚠ in the app)', 'Sans', 7.0, MUTED)
+def p7_configs(r):
+    r.head('REF · Config cheat sheet')
+    lines = [
+        ('L', 'BASE + SSH'),
+        ('', 'hostname R1 · enable secret ****'),
+        ('', 'line con 0 → password **** · login'),
+        ('', 'line vty 0 4 → login local · transport input ssh'),
+        ('', 'username admin secret ****'),
+        ('', 'ip domain-name lab.local · crypto key generate rsa'),
+        ('', 'service password-encryption · banner motd #Keep out#'),
+        ('L', 'INTERFACES'),
+        ('', 'int g0/0 → ip address 10.0.0.1 255.255.255.0 · no shut'),
+        ('', 'SW: int vlan 1 → ip address … · ip default-gateway …'),
+        ('L', 'VLANS & TRUNKS'),
+        ('', 'vlan 10 → name SALES'),
+        ('', 'int f0/1 → switchport mode access · sw access vlan 10'),
+        ('', 'int g0/1 → switchport mode trunk · sw trunk native vlan 99'),
+        ('L', 'ROUTER-ON-A-STICK'),
+        ('', 'int g0/0.10 → encapsulation dot1Q 10'),
+        ('', '   ip address 10.0.10.1 255.255.255.0  (g0/0: no shut)'),
+        ('L', 'ROUTING'),
+        ('', 'ip route 192.168.2.0 255.255.255.0 10.0.12.2'),
+        ('', 'ip route 0.0.0.0 0.0.0.0 10.0.12.1   ← default (S*)'),
+        ('', 'router ospf 1 → router-id 1.1.1.1'),
+        ('', '   network 10.0.0.0 0.255.255.255 area 0 · passive-int g0/2'),
+        ('L', 'ACLS'),
+        ('', 'access-list 10 deny host 192.168.1.10'),
+        ('', 'access-list 10 permit any → int g0/1 → ip access-group 10 out'),
+        ('', 'ip access-list extended NAME → deny/permit … → apply in'),
+        ('', 'copy run start   ← always save!'),
+    ]
+    for k, (kind, s) in enumerate(lines, 1):
+        if kind == 'L':
+            r.label(k, s)
+        else:
+            r.mono(k, 0.01, s, size=6.9)
 
 
 def p8_osi(r):
@@ -790,8 +812,8 @@ def page_ref_open3(c, n):
 
 
 def page_ref_open4(c, n):
-    opening(c, n, 'Reference: IOS modes (p.6) and "the book is out of date" (p.7)', 'Leave the bottom of p.7 empty. Every ⚠ box in the app\'s chapter pages becomes a new line.',
-            (6, p6_ios), (7, p7_outdated))
+    opening(c, n, 'Reference: IOS modes (p.6) and config cheat sheet (p.7)', 'p.6 = how to move around and what to check. p.7 = the command blocks you type in every lab (→ = enter that mode, then…).',
+            (6, p6_ios), (7, p7_configs))
 
 
 def page_ref_open5(c, n):
@@ -873,7 +895,7 @@ def page_routine(c, n):
         'Commands always get a meaning: "no shutdown → bring the interface up".',
         'Leave a blank page at the end of each domain for later additions.',
         'Book chapters you skip (4, 14, App A) get no spread; their one-page summaries are in the app.',
-        'Annotate the book lightly: mark skip/skim, flag ⚠ outdated bits, write the notebook page in the margin.'], size=9.2)
+        'Annotate the book lightly: mark skip/skim and write the notebook page in the margin.'], size=9.2)
 
     y = min(yl, yr) - 18
     c.setFillColor(HexColor('#fff8e6'))
