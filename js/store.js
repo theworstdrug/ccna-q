@@ -16,6 +16,7 @@ const defaults = () => ({
   notes: {},        // chapter -> { cues: [{q, a}], notes, summary }
   quiz: {},         // chapter|'exam' -> { best, last, attempts, at }
   drills: {},       // drillId -> { n, ok, streak, best }
+  nb: {},           // lessonId -> paper notebook page (topics beyond the book)
   settings: { examDate: '2027-01-29', cutoff: '2027-02-02', fontScale: 1 },
 });
 

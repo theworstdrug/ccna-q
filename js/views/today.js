@@ -114,7 +114,7 @@ function bookPanel(s) {
     cur ? h('a.ch-row.today-ch', { href: `#/book/${cur.n}` },
       h('span.st-dot.' + chStatus(cur.n), {}, chStatus(cur.n) === 'reading' ? '◐' : ''),
       h('div.ch-main', {}, h('div.ch-title', {}, h('span.ch-num', {}, cur.n), cur.title),
-        h('div.ch-meta', {}, h('span.verdict.v-' + cur.verdict.toLowerCase(), {}, cur.verdict), s.book[cur.n]?.page ? h('span.muted.small', {}, `p. ${s.book[cur.n].page}`) : null, q ? h('span.muted.small', {}, `quiz ${q.best}%`) : null)),
+        h('div.ch-meta', {}, h('span.verdict.v-' + cur.verdict.toLowerCase(), {}, cur.verdict), s.book[cur.n]?.page ? h('span.muted.small', {}, `📖 p.${s.book[cur.n].page}`) : null, s.book[cur.n]?.nb ? h('span.muted.small', {}, `📓 p.${s.book[cur.n].nb}`) : null, q ? h('span.muted.small', {}, `quiz ${q.best}%`) : null)),
       h('span.chev', {}, '›')) : h('p', {}, 'Book finished 🎉 Try the ', h('a', { href: '#/quiz/exam' }, 'book exam'), '.'));
 }
 

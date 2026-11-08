@@ -520,8 +520,15 @@ body { -webkit-user-select: none; user-select: none; }
 /* chapter page */
 .status-seg { margin-bottom: 12px; }
 .status-seg button { min-height: 40px; }
-.page-row { display: flex; align-items: center; gap: 10px; margin: 0 0 14px; }
+.page-row { display: flex; gap: 10px; margin: 0 0 14px; }
+.page-field { flex: 1; display: flex; flex-direction: column; gap: 4px; }
+.page-field .page-in { width: 100%; }
 .page-in { width: 110px; }
+.nb-list { background: var(--surface); border: 1px solid var(--line); border-radius: var(--radius); overflow: hidden; }
+.nb-row { display: flex; align-items: center; gap: 10px; padding: 6px 8px 6px 14px; min-height: 56px; border-bottom: 1px solid var(--line); }
+.nb-row:last-child { border-bottom: 0; }
+.nb-title { flex: 1; min-width: 0; color: var(--text); line-height: 1.3; }
+.nb-in { width: 84px; text-align: center; flex: none; }
 .outdated { border-color: color-mix(in srgb, var(--warn) 45%, var(--line)); background: color-mix(in srgb, var(--warn) 7%, var(--surface)); }
 .outdated h2 { color: var(--warn); }
 .outdated ul { margin: 6px 0 0; padding-left: 1.2em; font-size: .93rem; }

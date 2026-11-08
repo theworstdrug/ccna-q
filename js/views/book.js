@@ -36,6 +36,7 @@ export function bookProgress() {
 }
 
 export function render(root, [n]) {
+  if (n === '_notebook') return renderNotebook(root);
   if (n !== undefined && chapterByN(n)) return renderChapter(root, chapterByN(n));
   return renderList(root);
 }
@@ -51,7 +52,9 @@ function renderList(root) {
 
   root.append(
     h('header.view-head', {}, h('h1', {}, 'Book'),
-      h('div.head-actions', {}, h('a.btn.ghost.small', { href: '#/read/_glossary' }, 'Glossary'))),
+      h('div.head-actions', {},
+        h('a.btn.ghost.small', { href: '#/book/_notebook' }, '📓 Notebook'),
+        h('a.btn.ghost.small', { href: '#/read/_glossary' }, 'Glossary'))),
     h('section.panel.book-hero', {},
       h('div.muted.small', {}, BOOK_TITLE),
       h('div.hero-row', {},
@@ -88,6 +91,7 @@ function renderList(root) {
         h('div.ch-meta', {},
           h('span.verdict.v-' + c.verdict.toLowerCase(), {}, c.verdict),
           q ? h('span.muted.small', {}, `quiz ${q.best}%`) : null,
+          chState(c.n).nb ? h('span.muted.small', {}, `📓 ${chState(c.n).nb}`) : null,
           notes && (notes.cues?.length || notes.notes) ? h('span.muted.small', {}, '📝') : null,
           c.outdated.length ? h('span.muted.small', { title: 'Has outdated content' }, '⚠') : null)),
       h('span.chev', {}, '›'));
@@ -117,8 +121,67 @@ function lessonRow(l) {
   return h('a.lesson-row' + (done ? '.done' : ''), { href: `#/read/${encodeURIComponent(l.id)}` },
     h('span.lr-title', {}, l.title),
     h('span.lr-meta', {},
+      db().nb?.[l.id] ? h('span.muted.small', {}, `📓 ${db().nb[l.id]}`) : null,
       c.nw ? h('span.pill.s0', {}, c.nw) : null,
       done ? h('span.done-tick', {}, '✓') : h('span.chev', {}, '›')));
+}
+
+// ---------- notebook index (mirrors pages 1–2 of the paper notebook) ----------
+
+const NB_PAGES = 160;
+// "12" means a two-page spread (12–13); "83-88" means through 88.
+const lastPage = v => {
+  const nums = (String(v || '').match(/\d+/g) || []).map(Number);
+  if (!nums.length) return 0;
+  return nums.length === 1 ? nums[0] + 1 : Math.max(...nums);
+};
+
+function allNbEntries() {
+  const out = [];
+  for (const c of CHAPTERS) if (chState(c.n).nb) out.push(chState(c.n).nb);
+  for (const v of Object.values(db().nb || {})) if (v) out.push(v);
+  return out;
+}
+
+/** First free page after the reserved front section (index + reference = pages 1–8). */
+export function nextFreePage() {
+  const used = allNbEntries().map(lastPage).filter(Number.isFinite);
+  return Math.max(8, ...used) + 1;
+}
+
+function renderNotebook(root) {
+  const nbInput = (value, onSave, label) => h('input.input.page-in.nb-in', {
+    inputmode: 'numeric', placeholder: '—', value: value || '', 'aria-label': `Notebook page for ${label}`,
+    onchange: e => { onSave(e.target.value.trim()); drawSummary(); },
+  });
+  const summary = h('div', {});
+  const drawSummary = () => {
+    const used = Math.max(8, ...allNbEntries().map(lastPage).filter(Number.isFinite));
+    summary.replaceChildren(
+      h('div.panel-head', {}, h('h2', {}, `Filled up to p.${used} of ${NB_PAGES}`), h('span.muted.small', {}, `next free: p.${used + 1}`)),
+      h('div.bar', {}, h('span', { style: { width: `${Math.min(100, (used / NB_PAGES) * 100)}%` } })),
+      h('p.muted.small', {}, 'Pages 1–8 are reserved for the index and reference pages; the back pages (from 160 down) hold the mistake log and weekly reviews.'));
+  };
+  drawSummary();
+
+  const row = (num, title, value, onSave, href) => h('div.nb-row', {},
+    h('a.nb-title', { href }, num != null ? h('span.ch-num', {}, num) : null, title),
+    nbInput(value, onSave, title));
+
+  const extra = LESSONS.filter(l => !inBook.has(l.id) && !l.chapter);
+  root.append(
+    h('header.view-head.reader-head', {},
+      h('a.icon-btn', { href: '#/book', 'aria-label': 'Back to book' }, '‹'),
+      h('div.grow', {}, h('div.muted.small', {}, 'Paper notebook'), h('h1.reader-title', {}, 'Notebook index'))),
+    h('section.panel', {}, summary,
+      h('a.btn.ghost.small', { href: 'docs/notebook-guide.pdf', target: '_blank', rel: 'noopener' }, '📄 Notebook formatting guide (PDF)')),
+    h('p.hint', {}, 'Write the page where each topic\'s spread starts (e.g. 12 or 12–15). The same number goes on paper pages 1–2.'),
+    h('h2.section-title', {}, 'Book chapters'),
+    h('div.nb-list', {}, CHAPTERS.filter(readable).map(c => row(c.n, c.title, chState(c.n).nb,
+      v => update(x => { x.book[c.n] = { ...(x.book[c.n] || {}), nb: v }; }), `#/book/${c.n}`))),
+    h('h2.section-title', {}, 'Beyond the book'),
+    h('div.nb-list', {}, extra.map(l => row(null, l.title, db().nb?.[l.id],
+      v => update(x => { x.nb = { ...(x.nb || {}), [l.id]: v }; if (!v) delete x.nb[l.id]; }), `#/read/${encodeURIComponent(l.id)}`))));
 }
 
 // ---------- chapter page ----------
@@ -138,8 +201,12 @@ function renderChapter(root, c) {
   drawSeg();
 
   const page = h('input.input.page-in', {
-    inputmode: 'numeric', placeholder: 'e.g. 214', value: st().page || '',
+    inputmode: 'numeric', placeholder: 'e.g. 214', value: st().page || '', 'aria-label': 'Book page',
     onchange: e => update(x => { x.book[n] = { ...(x.book[n] || {}), page: e.target.value.trim() }; }),
+  });
+  const nbPage = h('input.input.page-in', {
+    inputmode: 'numeric', placeholder: `next: ${nextFreePage()}`, value: st().nb || '', 'aria-label': 'Notebook page',
+    onchange: e => update(x => { x.book[n] = { ...(x.book[n] || {}), nb: e.target.value.trim() }; }),
   });
 
   const itemList = (items, kind) => h('ul.guide.' + kind, {}, items.map((it, i) => {
@@ -171,7 +238,9 @@ function renderChapter(root, c) {
       h('a.icon-btn', { href: '#/book', 'aria-label': 'Back to book' }, '‹'),
       h('div.grow', {}, h('div.muted.small', {}, `Chapter ${n} · `, h('span.verdict.v-' + c.verdict.toLowerCase(), {}, c.verdict)), h('h1.reader-title', {}, c.title))),
     seg,
-    readable(c) ? h('label.page-row', {}, h('span.muted.small', {}, 'Bookmark: page'), page) : null,
+    readable(c) ? h('div.page-row', {},
+      h('label.page-field', {}, h('span.muted.small', {}, '📖 Book page'), page),
+      h('label.page-field', {}, h('span.muted.small', {}, '📓 Notebook page'), nbPage)) : null,
 
     c.outdated.length ? h('section.panel.outdated', {}, h('h2', {}, '⚠ Out of date in the book'), h('ul', {}, c.outdated.map(o => h('li', {}, o)))) : null,
 
