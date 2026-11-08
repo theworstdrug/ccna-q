@@ -369,4 +369,13 @@ export const CHAPTERS = [
 ];
 
 export const chapterByN = n => CHAPTERS.find(c => String(c.n) === String(n));
+
+// Suggested notebook page budget (matches the index in docs/notebook-guide.pdf).
+// Every spread starts on an even (left-hand) page; pp.1–9 are index, reference and tab key.
+export const NB_PLAN = {
+  1: '10–11', 2: '12–15', 3: '16–17', 5: '18–21', 6: '22–25', 7: '26–29', 8: '30–35', 9: '36–39', 10: '40–41',
+  11: '42–43', 12: '44–47', 13: '48–49', 15: '50–53', 16: '54–55', 17: '56–57', 18: '58–61', 19: '62–65', 20: '66–71',
+  vlans: '72–75', intervlan: '76–77', stp: '78–81', etherchannel: '82–83', ospf: '84–89', ipv6: '90–93', fhrp: '94–95',
+  natdhcp: '96–99', mgmt: '100–103', qos: '104–105', l2sec: '106–109', aaa: '110–111', wireless: '112–115', sdn: '116–119', cfgmgmt: '120–121',
+};
 export const readable = c => c.verdict !== 'Skip';

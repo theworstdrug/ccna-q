@@ -3,7 +3,7 @@
 
 import { h, toast, fmtDate } from '../ui.js';
 import { db, update } from '../store.js';
-import { CHAPTERS, chapterByN, readable, BOOK_TITLE, BOOK_DEADLINE } from '../data/book.js';
+import { CHAPTERS, chapterByN, readable, BOOK_TITLE, BOOK_DEADLINE, NB_PLAN } from '../data/book.js';
 import { LESSONS, lessonById } from '../data/lessons.js';
 import { DOMAIN_NAMES } from '../data/glossary.js';
 import { termsIn, statusOf, getTerm } from '../terms.js';
@@ -152,8 +152,8 @@ export function nextFreePage() {
 }
 
 function renderNotebook(root) {
-  const nbInput = (value, onSave, label) => h('input.input.page-in.nb-in', {
-    inputmode: 'numeric', placeholder: '—', value: value || '', 'aria-label': `Notebook page for ${label}`,
+  const nbInput = (value, onSave, label, plan) => h('input.input.page-in.nb-in', {
+    inputmode: 'numeric', placeholder: plan || '—', value: value || '', 'aria-label': `Notebook page for ${label}`,
     onchange: e => { onSave(e.target.value.trim()); drawSummary(); },
   });
   const summary = h('div', {});
@@ -166,9 +166,9 @@ function renderNotebook(root) {
   };
   drawSummary();
 
-  const row = (num, title, value, onSave, href) => h('div.nb-row', {},
+  const row = (num, title, value, onSave, href, plan) => h('div.nb-row', {},
     h('a.nb-title', { href }, num != null ? h('span.ch-num', {}, num) : null, title),
-    nbInput(value, onSave, title));
+    nbInput(value, onSave, title, plan));
 
   const extra = LESSONS.filter(l => !inBook.has(l.id) && !l.chapter);
   root.append(
@@ -177,13 +177,13 @@ function renderNotebook(root) {
       h('div.grow', {}, h('div.muted.small', {}, 'Paper notebook'), h('h1.reader-title', {}, 'Notebook index'))),
     h('section.panel', {}, summary,
       h('a.btn.ghost.small', { href: 'docs/notebook-guide.pdf', target: '_blank', rel: 'noopener' }, '📄 Notebook formatting guide (PDF)')),
-    h('p.hint', {}, 'Write the page where each topic\'s spread starts (e.g. 12 or 12–15). The same number goes on paper pages 1–2.'),
+    h('p.hint', {}, 'Grey numbers are the planned budget from the notebook guide. Type the pages you actually used (e.g. 12 or 12–15); the same numbers go on paper pages 1–2.'),
     h('h2.section-title', {}, 'Book chapters'),
     h('div.nb-list', {}, CHAPTERS.filter(readable).map(c => row(c.n, c.title, chState(c.n).nb,
-      v => update(x => { x.book[c.n] = { ...(x.book[c.n] || {}), nb: v }; }), `#/book/${c.n}`))),
+      v => update(x => { x.book[c.n] = { ...(x.book[c.n] || {}), nb: v }; }), `#/book/${c.n}`, NB_PLAN[c.n]))),
     h('h2.section-title', {}, 'Beyond the book'),
     h('div.nb-list', {}, extra.map(l => row(null, l.title, db().nb?.[l.id],
-      v => update(x => { x.nb = { ...(x.nb || {}), [l.id]: v }; if (!v) delete x.nb[l.id]; }), `#/read/${encodeURIComponent(l.id)}`))));
+      v => update(x => { x.nb = { ...(x.nb || {}), [l.id]: v }; if (!v) delete x.nb[l.id]; }), `#/read/${encodeURIComponent(l.id)}`, NB_PLAN[l.id]))));
 }
 
 // ---------- chapter page ----------
@@ -207,7 +207,7 @@ function renderChapter(root, c) {
     onchange: e => update(x => { x.book[n] = { ...(x.book[n] || {}), page: e.target.value.trim() }; }),
   });
   const nbPage = h('input.input.page-in', {
-    inputmode: 'numeric', placeholder: `next: ${nextFreePage()}`, value: st().nb || '', 'aria-label': 'Notebook page',
+    inputmode: 'numeric', placeholder: NB_PLAN[n] ? `plan: ${NB_PLAN[n]}` : `next: ${nextFreePage()}`, value: st().nb || '', 'aria-label': 'Notebook page',
     onchange: e => update(x => { x.book[n] = { ...(x.book[n] || {}), nb: e.target.value.trim() }; }),
   });
 

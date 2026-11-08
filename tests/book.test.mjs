@@ -54,3 +54,18 @@ test('drill generators produce answerable items', () => {
     }
   }
 });
+
+test('notebook page plan: covers every read chapter and beyond-the-book lesson, spreads on even pages, no overlaps', async () => {
+  const { NB_PLAN } = await import('../js/data/book.js');
+  const inBook = new Set(CHAPTERS.flatMap(c => c.lessons));
+  const keys = [...CHAPTERS.filter(c => c.verdict !== 'Skip').map(c => String(c.n)), ...LESSONS.filter(l => !inBook.has(l.id) && !l.chapter).map(l => l.id)];
+  for (const k of keys) assert.ok(NB_PLAN[k], `no planned pages for ${k}`);
+  const ranges = Object.values(NB_PLAN).map(v => v.split('–').map(Number)).sort((a, b) => a[0] - b[0]);
+  let prev = 9;
+  for (const [a, b] of ranges) {
+    assert.equal(a % 2, 0, `spread ${a}–${b} must start on an even page`);
+    assert.ok(a > prev, `overlap at ${a}`);
+    assert.ok(b < 136, `${a}–${b} runs into the back section`);
+    prev = b;
+  }
+});

@@ -238,10 +238,10 @@ def page_overview(c, n):
     y -= bh + 42
     rows = [['Pages', 'Section', 'What goes there'],
             ['1–2', 'Index', 'Topic → page number. Fill it in as you go. (Mirror in the app: Book → Notebook.)'],
-            ['3–9', 'Reference', 'pp.3–8: subnetting, ports, AD/route codes, IOS modes, "book is outdated" list, OSI chart (pages 4–5 of this guide). p.9: your tab-colour key.'],
+            ['3–9', 'Reference', 'pp.3–8: subnetting, ports, AD/route codes, IOS modes, "book is outdated" list, OSI chart (guide pages 5–8). p.9: your tab-colour key (guide page 8).'],
             ['10–71', 'Book chapters', 'One spread per chapter you read or skim, starting on an even page: about 3–4 pages each, 6 for Ch 8 and Ch 20. Skip chapters 4, 14 and Appendix A.'],
             ['72–135', 'Beyond the book', 'About 4 pages each: VLANs, STP, EtherChannel, OSPF, IPv6, FHRP, NAT, services, QoS, security, wireless, automation'],
-            ['136–154', 'Back section', 'Work backwards: mistake log from p.154, weekly review log from p.145 (page 6)']]
+            ['136–154', 'Back section', 'Work backwards: mistake log from p.154, weekly review log from p.145 (guide page 9)']]
     y = table(c, x, y, W - 80, rows, [0.11, 0.17, 0.72], size=8.8)
 
     # setup checklist + tabs
@@ -250,8 +250,8 @@ def page_overview(c, n):
     y0 = y
     yy = heading(c, x, y, '2  Setup tonight (≈20 min)')
     steps = [f'Write the page number in the corner box of every page, 1–{PAGES}. Odd numbers are right-hand pages, even numbers left-hand.',
-             'Pages 1–2: write INDEX at the top. Draw 3 columns: Topic | Page | Tab.',
-             'Pages 3–8: write the reference titles (see pages 4–5). Page 9: copy the tab-colour key from box 3.',
+             'Pages 1–2: copy the index from guide pages 4–5. Its page numbers are your budget.',
+             'Pages 3–9: copy the reference pages and tab key (guide pages 5–8).',
              'Rule the first chapter spread (pages 10–11) as shown on page 2. Every spread starts on an even page.',
              'Page 154: write MISTAKE LOG. Page 145: WEEKLY REVIEW.',
              'Stick a tab on p.3 (Reference) and p.154 (Mistakes).',
@@ -262,7 +262,7 @@ def page_overview(c, n):
 
     tx = x + colw + 20
     ty = heading(c, tx, y, '3  Sticky-tab colour key')
-    ty = para(c, tx, ty, colw, 'One colour per exam domain. Tab the first spread of each domain. Colour each box with the tab you choose:', size=9, color=MUTED) - 4
+    ty = para(c, tx, ty, colw, 'One colour per exam domain. Flag every spread\'s right-hand page in its domain colour (side edge); section flags on the top edge. Colour each box with the flag you choose:', size=9, color=MUTED) - 4
     keys = [('Network Fundamentals', '20%'), ('Network Access', '20%'), ('IP Connectivity', '25%'), ('IP Services', '10%'),
             ('Security Fundamentals', '15%'), ('Automation & Programmability', '10%'), ('Reference pages', ''), ('Mistake log', '')]
     for label, wt in keys:
@@ -514,149 +514,304 @@ def page_example(c, n):
     footer(c, n)
 
 
-# ================================================================= PAGE 4 · reference pages 3-8
+# ================================================================= PAGES 4-8 · index + reference, written on ruled pages
 
-def page_reference(c, n):
-    W, H = letter
+PEN_HEAD = HexColor('#14306e')
+
+
+class Ruled:
+    """Writes onto one drawn notebook page, line by line, like handwriting."""
+
+    def __init__(self, c, x, y, w, h, side, num):
+        self.c, self.x, self.w, self.side = c, x, w, side
+        self.ys, self.sp, self.box = notebook_page(c, x, y, w, h, side, num=num)
+        self.x0 = x + w * 0.11 + 6                       # just right of the printed pink margin
+        self.x1 = x + w - (w * 0.09 if side == 'L' else 8)  # clear of the holes on left pages
+
+    def X(self, f):
+        return self.x0 + f * (self.x1 - self.x0)
+
+    def head(self, s):
+        """Header beside the corner box (box is top-left on left pages, top-right on right pages)."""
+        bx, by, bw, bh = self.box
+        hx = bx + bw + 10 if self.side == 'L' else self.x0
+        text(self.c, hx, self.ys[0] + 9, s, 'Sans-B', 9.5, PEN_HEAD)
+        pencil(self.c, self.x + 2, self.ys[0], self.x + self.w - 2, self.ys[0], 1.1)
+
+    def w_(self, i, f, s, font='Sans-I', size=7.9, color=PEN, anchor='l'):
+        if i < len(self.ys) and s:
+            text(self.c, self.X(f), self.ys[i] + 2, s, font, size, color, anchor)
+
+    def row(self, i, cols, cells, font='Sans-I', size=7.9, color=PEN):
+        for f, s in zip(cols, cells):
+            self.w_(i, f + 0.01, s, font, size, color)
+
+    def mono(self, i, f, s, size=7.6, bold=False):
+        self.w_(i, f, s, 'Mono-B' if bold else 'Mono', size)
+
+    def label(self, i, s):
+        self.w_(i, 0, s, 'Sans-B', 7.6, PENCIL)
+
+    def cols(self, fracs, i0, i1):
+        """Pen column lines between rows i0..i1 (inclusive), plus a pen line under the header row."""
+        top = self.ys[i0] + self.sp
+        for f in fracs:
+            pencil(self.c, self.X(f), top, self.X(f), self.ys[i1], 0.9)
+        pencil(self.c, self.x0, self.ys[i0], self.x1, self.ys[i0], 0.9)
+
+
+def opening(c, n, title, sub, left, right):
+    W, H = landscape(letter)
     c.setPageSize((W, H))
-    x, y = 40, H - 46
-    text(c, x, y, 'Reference pages (notebook pp. 3–8)', 'Sans-B', 20)
-    y -= 18
-    text(c, x, y, 'Copy these in once, then add to them as you go. They are the pages you will flip to most.', 'Sans', 10, MUTED)
-    y -= 22
-    colw = (W - 80 - 16) / 2
+    text(c, 40, H - 46, title, 'Sans-B', 20)
+    text(c, 40, H - 64, sub, 'Sans', 10, MUTED)
+    PW, PH, X, Y = 340, 470, 46, 50
+    for spec, x, side in ((left, X, 'L'), (right, X + PW + 10, 'R')):
+        if spec is None:  # inside front cover
+            c.setFillColor(HexColor('#e9e4da'))
+            c.setStrokeColor(HexColor('#b9b2a5'))
+            c.rect(x, Y, PW, PH, stroke=1, fill=1)
+            text(c, x + PW / 2, Y + PH - 40, 'inside front cover', 'Sans', 9, MUTED, 'c')
+            for k, s in enumerate(['Name: sin', 'CCNA 200-301 v1.1', 'Exam: Fri Jan 29, 2027', 'v1.1 last day: Feb 2',
+                                   'Book: CCNA 1 & 2 Companion Guide 3e', '', 'If found, please return to:', '_______________________']):
+                text(c, x + 40, Y + PH - 90 - k * 22, s, 'Sans-I', 11, PEN)
+            continue
+        num, fn = spec
+        fn(Ruled(c, x, Y, PW, PH, side, num))
+    footer(c, n)
 
-    # p.3 subnetting
-    yl = y
-    text(c, x, yl, 'p.3  Subnetting', 'Sans-B', 12, ACCENT)
-    yl -= 14
-    text(c, x, yl, 'Bits   128  64  32  16   8   4   2   1', 'Mono-B', 8.6)
-    yl -= 11
-    text(c, x, yl, 'Mask   128 192 224 240 248 252 254 255', 'Mono-B', 8.6)
-    yl -= 8
-    rows = [['/', 'Mask', 'Block (octet)', 'Hosts']]
-    for p in range(16, 31):
+
+# ---------- page contents
+
+CH_PLAN = [  # chapter, title, pages, tab — 18 chapters × 2–6 pages = pp.10–71, every spread on an even page
+    ('Ch 1', 'Binary, hex, IP & masks', '10–11', 'Fund'), ('Ch 2', 'OSI, TCP/IP, encapsulation', '12–15', 'Fund'),
+    ('Ch 3', 'Media (skim)', '16–17', 'Fund'), ('Ch 5', 'Ethernet frames, MAC', '18–21', 'Fund'),
+    ('Ch 6', 'Domains, switching, STP intro', '22–25', 'Access'), ('Ch 7', 'TCP/IP suite, IP classes', '26–29', 'Fund'),
+    ('Ch 8', 'Routing basics + SUBNETTING', '30–35', 'Fund'), ('Ch 9', 'TCP/UDP, ports, apps', '36–39', 'Fund'),
+    ('Ch 10', 'Inside a router (skim)', '40–41', 'IP'), ('Ch 11', 'IOS CLI basics (skim)', '42–43', 'IP'),
+    ('Ch 12', 'Router configuration', '44–47', 'IP'), ('Ch 13', 'CDP, remote access', '48–49', 'Access'),
+    ('Ch 15', 'Static routes, AD, protocols', '50–53', 'IP'), ('Ch 16', 'Reading the routing table', '54–55', 'IP'),
+    ('Ch 17', 'ICMP, ping, traceroute', '56–57', 'Fund'), ('Ch 18', 'Troubleshooting', '58–61', 'IP'),
+    ('Ch 19', 'TCP in depth, ARP', '62–65', 'Fund'), ('Ch 20', 'ACLs', '66–71', 'Sec'),
+]
+BEYOND_PLAN = [  # pp.72–121, spare 122–135
+    ('VLANs & trunks', '72–75', 'Access'), ('Inter-VLAN routing', '76–77', 'Access'), ('STP / Rapid PVST+', '78–81', 'Access'),
+    ('EtherChannel, LLDP', '82–83', 'Access'), ('OSPF', '84–89', 'IP'), ('IPv6', '90–93', 'IP'), ('FHRP / HSRP', '94–95', 'IP'),
+    ('NAT & DHCP', '96–99', 'Svc'), ('DNS, NTP, SNMP, syslog, SSH', '100–103', 'Svc'), ('QoS', '104–105', 'Svc'),
+    ('L2 security (port sec, snooping, DAI)', '106–109', 'Sec'), ('AAA, wireless security', '110–111', 'Sec'),
+    ('Wireless architectures, WLC', '112–115', 'Access'), ('SDN, REST, JSON', '116–119', 'Auto'), ('Ansible/Terraform, AI', '120–121', 'Auto'),
+]
+IDX_COLS = [0, 0.72, 0.87]
+
+
+def idx_header(r, i):
+    r.row(i, IDX_COLS, ['Topic', 'Pages', 'Tab'], 'Sans-B', 7.8)
+    r.cols(IDX_COLS[1:], i, 27)
+
+
+def p1_index(r):
+    r.head('INDEX')
+    idx_header(r, 1)
+    r.label(2, 'BOOK CHAPTERS')
+    for k, (ch, t, pg, tab) in enumerate(CH_PLAN):
+        r.row(3 + k, IDX_COLS, [f'{ch}  {t}', pg, tab])
+    r.w_(22, 0.01, 'skipped: Ch 4, Ch 14, App A (no spread)', size=7.4, color=MUTED)
+    r.w_(24, 0.01, 'Tabs: Fund · Access · IP · Svc · Sec · Auto', size=7.4, color=MUTED)
+
+
+def p2_index(r):
+    r.head('INDEX (cont.)')
+    idx_header(r, 1)
+    r.label(2, 'FRONT')
+    r.row(3, IDX_COLS, ['Reference: subnet 3 · ports 4 · AD 5', '3–5', 'Ref'])
+    r.row(4, IDX_COLS, ['IOS 6 · outdated 7 · OSI 8 · tab key 9', '6–9', 'Ref'])
+    r.label(6, 'BEYOND THE BOOK')
+    for k, (t, pg, tab) in enumerate(BEYOND_PLAN):
+        r.row(7 + k, IDX_COLS, [t, pg, tab])
+    r.row(22, IDX_COLS, ['spare / overflow', '122–135', ''])
+    r.label(24, 'BACK (written backwards)')
+    r.row(25, IDX_COLS, ['Weekly review log', '145 ←', ''])
+    r.row(26, IDX_COLS, ['Mistake log', '154 ←', 'Mist.'])
+
+
+def p3_subnet(r):
+    r.head('REF · Subnetting')
+    r.mono(1, 0, 'Bits  128  64  32  16   8   4   2   1', bold=True)
+    r.mono(2, 0, 'Mask  128 192 224 240 248 252 254 255', bold=True)
+    r.w_(3, 0, 'Block = 256 − mask octet   ·   Wildcard = 255 − mask octet', size=7.6)
+    cols = [0, 0.13, 0.55, 0.78]
+    r.row(5, cols, ['/', 'Mask', 'Block', 'Hosts'], 'Sans-B', 7.8)
+    for k, p in enumerate(range(16, 31)):
         m = (0xffffffff << (32 - p)) & 0xffffffff
         octs = [(m >> s) & 255 for s in (24, 16, 8, 0)]
-        k = (p - 1) // 8
-        blk = 256 - octs[k]
-        rows.append([f'/{p}', '.'.join(map(str, octs)), f'{blk} ({k + 1}{"st nd rd th".split()[k]})', f'{2 ** (32 - p) - 2:,}'])
-    yl = table(c, x, yl, colw, rows, [0.12, 0.38, 0.27, 0.23], size=7.8)
-    yl -= 6
-    yl = para(c, x, yl, colw, 'Block = 256 − mask octet. Network = multiple of the block ≤ host octet. Broadcast = next multiple − 1. Wildcard = 255 − mask octet.', size=7.8, color=MUTED)
-
-    # p.4 ports
-    yr = y
-    xr = x + colw + 16
-    text(c, xr, yr, 'p.4  Ports', 'Sans-B', 12, ACCENT)
-    yr -= 8
-    ports = [['TCP', 'Port', 'UDP', 'Port'],
-             ['FTP data / control', '20 / 21', 'DNS (queries)', '53'],
-             ['SSH', '22', 'DHCP server / client', '67 / 68'],
-             ['Telnet', '23', 'TFTP', '69'],
-             ['SMTP', '25', 'NTP', '123'],
-             ['DNS (zone transfer)', '53', 'SNMP / traps', '161 / 162'],
-             ['HTTP', '80', 'Syslog', '514'],
-             ['POP3 / IMAP', '110 / 143', 'RIP', '520'],
-             ['BGP', '179', 'CAPWAP ctrl / data', '5246 / 5247'],
-             ['HTTPS', '443', 'RADIUS', '1812 / 1813'],
-             ['TACACS+', '49', '', '']]
-    yr = table(c, xr, yr, colw, ports, [0.31, 0.19, 0.31, 0.19], size=7.6)
-    yr -= 16
-    text(c, xr, yr, 'p.5  AD values & route codes', 'Sans-B', 12, ACCENT)
-    yr -= 8
-    ad = [['Source', 'AD', 'Code', 'Meaning'],
-          ['Connected', '0', 'C', 'connected subnet'],
-          ['Static', '1', 'L', 'local /32 (own IP)'],
-          ['eBGP', '20', 'S / S*', 'static / default'],
-          ['EIGRP', '90', 'O', 'OSPF'],
-          ['OSPF', '110', 'D', 'EIGRP'],
-          ['RIP', '120', 'R', 'RIP'],
-          ['iBGP', '200', 'B', 'BGP'],
-          ['Unusable', '255', '[110/2]', '[AD / metric]']]
-    yr = table(c, xr, yr, colw, ad, [0.28, 0.14, 0.2, 0.38], size=7.8)
-    yr -= 6
-    yr = para(c, xr, yr, colw, 'Route choice: 1) longest prefix  2) lowest AD  3) lowest metric (ties = load-balance).', size=7.8, color=MUTED)
-
-    # p.6 IOS modes (full width)
-    y2 = min(yl, yr) - 18
-    text(c, x, y2, 'p.6  IOS modes & first commands', 'Sans-B', 12, ACCENT)
-    y2 -= 8
-    modes = [['Prompt', 'Mode', 'Get in', 'Get out', 'Typical commands'],
-             ['R1>', 'User EXEC', '(login)', 'exit', 'ping, traceroute, show (limited)'],
-             ['R1#', 'Privileged EXEC', 'enable', 'disable', 'show …, copy run start, debug, reload'],
-             ['R1(config)#', 'Global config', 'configure terminal', 'exit / end / Ctrl-Z', 'hostname, enable secret, ip route, vlan, router ospf'],
-             ['R1(config-if)#', 'Interface', 'interface g0/0', 'exit / end', 'ip address, no shutdown, description, switchport'],
-             ['R1(config-line)#', 'Line', 'line vty 0 4', 'exit / end', 'password, login (local), transport input ssh'],
-             ['R1(config-router)#', 'Routing protocol', 'router ospf 1', 'exit / end', 'network … area 0, router-id, passive-interface']]
-    y2 = table(c, x, y2, W - 80, modes, [0.17, 0.15, 0.17, 0.15, 0.36], size=7.8)
-    y2 -= 6
-    para(c, x, y2, W - 80, 'Must-know show commands: show ip interface brief · show running-config · show ip route · show vlan brief · show interfaces trunk · show mac address-table · show cdp neighbors · show ip ospf neighbor · show access-lists', size=7.8, color=MUTED)
-    footer(c, n)
+        kk = (p - 1) // 8
+        r.row(6 + k, cols, [f'/{p}', '.'.join(map(str, octs)), f'{256 - octs[kk]}  ({kk + 1}{"st nd rd th".split()[kk]})', f'{2 ** (32 - p) - 2:,}'], size=7.6)
+    r.cols(cols[1:], 5, 20)
+    r.w_(22, 0, 'Network = multiple of block ≤ host octet', size=7.6)
+    r.w_(23, 0, 'Broadcast = next multiple − 1', size=7.6)
+    r.w_(24, 0, 'Hosts = 2^h − 2  ·  Subnets = 2^n (subnet zero OK)', size=7.6)
+    r.w_(26, 0, 'e.g. 172.16.45.200/27 → block 32 → net .192, bcast .223', size=7.6)
 
 
-def page_reference2(c, n):
-    W, H = letter
-    x, y = 40, H - 46
-    text(c, x, y, 'Reference pages (continued)', 'Sans-B', 20)
-    y -= 26
-    text(c, x, y, 'p.7  "The book is out of date" list', 'Sans-B', 12, ACCENT)
-    y -= 13
-    y = para(c, x, y, W - 80, 'The Companion Guide is from 2003. Each time you hit a ⚠ in the app\'s chapter page, add a line here so you don\'t learn the old version.', size=8.5, color=MUTED) - 2
-    rows = [['Ch', 'The book says…', 'Today / the exam says…'],
-            ['3', 'WEP, LEAP for wireless security', 'Broken. WPA2 (AES) and WPA3 (SAE)'],
-            ['3', 'Pick straight-through vs crossover carefully', 'Auto-MDIX fixes it; still know the rule'],
-            ['6', '10BASE5 / 10BASE2 coax, 802.1D STP', 'Gone. Rapid STP (802.1w / Rapid PVST+)'],
-            ['7', 'RARP and BOOTP; classful A/B/C networks', 'DHCP; CIDR (any prefix length)'],
-            ['8', 'Subnets = 2ⁿ − 2 (no subnet zero / all-ones)', 'Subnets = 2ⁿ (ip subnet-zero default). Hosts still 2ʰ − 2'],
-            ['10', 'ISDN, Frame Relay, dial-up WANs', 'Ethernet WAN, MPLS, broadband VPN, SD-WAN'],
-            ['11', 'HyperTerminal, setup mode', 'screen/minicom/PuTTY; answer "no" to setup'],
-            ['12', 'enable password, Telnet on VTY, serial clock rate', 'enable secret, SSH, no serial on v1.1'],
-            ['15–16', 'IGRP, RIP in depth, classful routing', 'IGRP gone; OSPF is what v1.1 tests'],
-            ['17', 'ICMP source quench', 'Deprecated'],
-            ['', '', ''], ['', '', '']]
-    y = table(c, x, y, W - 80, rows, [0.08, 0.44, 0.48], size=8.2)
-
-    y -= 22
-    text(c, x, y, 'p.8  OSI ↔ TCP/IP chart', 'Sans-B', 12, ACCENT)
-    y -= 8
-    osi = [['#', 'OSI layer', 'TCP/IP', 'PDU', 'Devices', 'Protocols / addresses'],
-           ['7', 'Application', 'Application', 'Data', '', 'HTTP, DNS, FTP, SMTP, SNMP, SSH'],
-           ['6', 'Presentation', '', 'Data', '', 'encryption, compression, formats'],
-           ['5', 'Session', '', 'Data', '', 'session setup / teardown'],
-           ['4', 'Transport', 'Transport', 'Segment', '(firewall)', 'TCP, UDP, port numbers'],
-           ['3', 'Network', 'Internet', 'Packet', 'Router, L3 switch', 'IP, ICMP, OSPF, IP addresses'],
-           ['2', 'Data Link', 'Link', 'Frame', 'Switch, bridge, AP', 'Ethernet, 802.1Q, MAC addresses'],
-           ['1', 'Physical', 'Link', 'Bits', 'Hub, repeater, cable', 'UTP, fiber, radio']]
-    y = table(c, x, y, W - 80, osi, [0.05, 0.15, 0.14, 0.11, 0.2, 0.35], size=8.2)
-    y -= 8
-    para(c, x, y, W - 80, 'Mnemonics: top-down "All People Seem To Need Data Processing"; PDUs "Don\'t Some People Fear Birthdays" (Data, Segment, Packet, Frame, Bits).', size=8.3, color=MUTED)
-    footer(c, n)
+def p4_ports(r):
+    r.head('REF · Port numbers')
+    cols = [0, 0.5]
+    r.row(1, cols, ['TCP', 'UDP'], 'Sans-B', 7.8)
+    rows = [('FTP  20 data / 21 ctrl', 'DNS  53'), ('SSH  22', 'DHCP  67 srv / 68 client'), ('Telnet  23', 'TFTP  69'),
+            ('SMTP  25', 'NTP  123'), ('DNS  53 (zone transfer)', 'SNMP  161 / traps 162'), ('HTTP  80', 'Syslog  514'),
+            ('POP3  110', 'RIP  520'), ('IMAP  143', 'CAPWAP  5246 ctrl / 5247 data'), ('BGP  179', 'RADIUS  1812 / 1813'),
+            ('HTTPS  443', ''), ('TACACS+  49', '')]
+    for k, (a, b) in enumerate(rows):
+        r.row(2 + k, cols, [a, b])
+    r.cols([0.5], 1, 12)
+    r.w_(14, 0, 'Well-known 0–1023 · registered 1024–49151', size=7.6)
+    r.w_(15, 0, 'Ephemeral (client source port) 49152–65535', size=7.6)
+    r.w_(17, 0, 'IP protocol #:  ICMP 1 · TCP 6 · UDP 17 · OSPF 89', size=7.6)
+    r.w_(19, 0, 'UDP = no handshake: DNS, DHCP, TFTP, SNMP, syslog, voice', size=7.6)
 
 
-# ================================================================= PAGE 6 · index + back section
+def p5_ad(r):
+    r.head('REF · AD & route codes')
+    cols = [0, 0.3, 0.45, 0.58]
+    r.row(1, cols, ['Source', 'AD', 'Code', 'Meaning'], 'Sans-B', 7.8)
+    rows = [('Connected', '0', 'C', 'connected subnet'), ('Static', '1', 'L', 'local /32 (own IP)'), ('eBGP', '20', 'S', 'static'),
+            ('EIGRP', '90', 'S*', 'static default'), ('OSPF', '110', 'O', 'OSPF'), ('RIP', '120', 'D', 'EIGRP'),
+            ('EIGRP ext.', '170', 'R', 'RIP'), ('iBGP', '200', 'B', 'BGP'), ('Unusable', '255', '*', 'candidate default')]
+    for k, cells in enumerate(rows):
+        r.row(2 + k, cols, cells)
+    r.cols(cols[1:], 1, 10)
+    r.label(12, 'CHOOSING A ROUTE')
+    r.w_(13, 0, '1) longest prefix match, always first', size=7.6)
+    r.w_(14, 0, '2) lowest AD (same prefix, different sources)', size=7.6)
+    r.w_(15, 0, '3) lowest metric (same protocol)', size=7.6)
+    r.w_(16, 0, '    equal metric → load-balance (ECMP)', size=7.6)
+    r.mono(18, 0, 'O 10.1.1.0/24 [110/2] via 10.0.12.2', size=7.2)
+    r.w_(19, 0, '    [AD / metric] → AD 110 (OSPF), cost 2', size=7.6)
+    r.w_(21, 0, 'Floating static = higher AD, e.g. 130 > OSPF 110', size=7.6)
+    r.mono(22, 0, 'ip route 0.0.0.0 0.0.0.0 10.0.0.1  → S*', size=7.2)
+
+
+def p6_ios(r):
+    r.head('REF · IOS modes')
+    cols = [0, 0.36, 0.6]
+    r.row(1, cols, ['Prompt', 'Mode', 'In → Out'], 'Sans-B', 7.8)
+    rows = [('R1>', 'user EXEC', 'login → exit'), ('R1#', 'privileged', 'enable → disable'), ('R1(config)#', 'global', 'conf t → end'),
+            ('R1(config-if)#', 'interface', 'int g0/0 → exit'), ('R1(config-line)#', 'line', 'line vty 0 4 → exit'),
+            ('R1(config-router)#', 'routing', 'router ospf 1 → exit')]
+    for k, (a, b, cc) in enumerate(rows):
+        r.mono(2 + k, 0.01, a, size=7.2)
+        r.w_(2 + k, 0.37, b)
+        r.w_(2 + k, 0.61, cc)
+    r.cols(cols[1:], 1, 7)
+    r.w_(9, 0, 'end / Ctrl-Z → straight back to R1#', size=7.6)
+    r.w_(10, 0, 'do <command> → run a # command from config mode', size=7.6)
+    r.label(12, 'MUST-KNOW SHOW COMMANDS')
+    cmds = [('sh ip int br', 'IP + status, 1 line each'), ('sh run', 'active config (RAM)'), ('sh start', 'saved config (NVRAM)'),
+            ('sh ip route', 'routing table'), ('sh vlan brief', 'access ports per VLAN'), ('sh int trunk', 'trunks + allowed VLANs'),
+            ('sh mac address-table', 'MAC → port'), ('sh cdp nei (detail)', 'who is connected where'), ('sh ip ospf nei', 'OSPF adjacencies'),
+            ('sh access-lists', 'ACL lines + hit counts'), ('copy run start', 'SAVE IT!')]
+    for k, (a, b) in enumerate(cmds):
+        r.mono(13 + k, 0, a, size=7.2)
+        r.w_(13 + k, 0.45, f'→ {b}')
+
+
+def p7_outdated(r):
+    r.head('REF · The book is out of date')
+    cols = [0, 0.1, 0.5]
+    r.row(1, cols, ['Ch', 'Book says', 'Today / exam'], 'Sans-B', 7.8)
+    rows = [('3', 'WEP / LEAP', 'WPA2 (AES), WPA3 (SAE)'), ('3', 'straight vs crossover', 'Auto-MDIX (know the rule)'),
+            ('6', '10BASE5 / 10BASE2 coax', 'gone'), ('6', '802.1D STP', 'Rapid STP / Rapid PVST+'), ('7', 'RARP, BOOTP', 'DHCP'),
+            ('7', 'classful A / B / C', 'CIDR, any prefix'), ('8', 'subnets = 2^n − 2', '2^n (subnet zero OK)'),
+            ('10', 'ISDN, Frame Relay', 'Ethernet WAN, MPLS, SD-WAN'), ('11', 'HyperTerminal, setup', 'screen / PuTTY; say "no"'),
+            ('12', 'enable password', 'enable secret'), ('12', 'Telnet on VTY', 'SSH'), ('12', 'serial clock rate', 'not on v1.1'),
+            ('15', 'IGRP, classful RIP', 'OSPF (IGRP is gone)'), ('17', 'source quench', 'deprecated')]
+    for k, cells in enumerate(rows):
+        r.row(2 + k, cols, cells, size=7.6)
+    r.cols(cols[1:], 1, 27)
+    r.w_(17, 0.11, '(add a line each time you hit a ⚠ in the app)', 'Sans', 7.0, MUTED)
+
+
+def p8_osi(r):
+    r.head('REF · OSI ↔ TCP/IP')
+    cols = [0, 0.07, 0.33, 0.55, 0.73]
+    r.row(1, cols, ['#', 'OSI', 'TCP/IP', 'PDU', 'Device'], 'Sans-B', 7.8)
+    rows = [('7', 'Application', 'Application', 'Data', ''), ('6', 'Presentation', '   "', 'Data', ''), ('5', 'Session', '   "', 'Data', ''),
+            ('4', 'Transport', 'Transport', 'Segment', 'firewall'), ('3', 'Network', 'Internet', 'Packet', 'router'),
+            ('2', 'Data Link', 'Link', 'Frame', 'switch, AP'), ('1', 'Physical', 'Link', 'Bits', 'hub, cable')]
+    for k, cells in enumerate(rows):
+        r.row(2 + k, cols, cells)
+    r.cols(cols[1:], 1, 8)
+    r.label(10, 'PROTOCOLS / ADDRESSES')
+    for k, s in enumerate(['7  HTTP · DNS · FTP · SMTP · SNMP · SSH', '6  encryption, compression, formats', '5  session setup / teardown',
+                           '4  TCP, UDP · port numbers', '3  IP, ICMP, OSPF · IP addresses', '2  Ethernet, 802.1Q · MAC addresses',
+                           '1  UTP, fiber, radio · bits']):
+        r.w_(11 + k, 0, s, size=7.6)
+    r.w_(19, 0, 'All People Seem To Need Data Processing (7 → 1)', size=7.6)
+    r.w_(20, 0, 'Don\'t Some People Fear Birthdays (PDUs):', size=7.6)
+    r.w_(21, 0, '   Data · Segment · Packet · Frame · Bits', size=7.6)
+
+
+def p9_tabs(r):
+    r.head('TAB KEY')
+    cols = [0, 0.14, 0.7]
+    r.row(1, cols, ['Colour', 'Domain', 'Exam %'], 'Sans-B', 7.8)
+    rows = [('Network Fundamentals', '20%'), ('Network Access', '20%'), ('IP Connectivity', '25%'), ('IP Services', '10%'),
+            ('Security Fundamentals', '15%'), ('Automation & Prog.', '10%'), ('Reference pages', '—'), ('Mistake log', '—')]
+    for k, (d, pct) in enumerate(rows):
+        i = 2 + k
+        c = r.c
+        c.setStrokeColor(PEN)
+        c.setLineWidth(0.8)
+        c.rect(r.X(0.02), r.ys[i] + 2, 18, 8, stroke=1, fill=0)
+        r.w_(i, 0.15, d)
+        r.w_(i, 0.71, pct)
+    r.cols(cols[1:], 1, 9)
+    r.label(11, 'WHERE THE FLAGS GO')
+    for k, s in enumerate(['Side edge: every spread, on its right-hand page,', '   in its domain colour. Stagger them down the edge.',
+                           'Top edge: sections. Index p.1 · Reference p.3 ·', '   Beyond the book p.72 · Back p.136',
+                           '', 'Weight = how much of the exam: IP Connectivity', '   (25%) deserves the most flags and review.',
+                           '', 'Exam Fri Jan 29 · v1.1 last day Feb 2']):
+        r.w_(12 + k, 0, s, size=7.6)
+
+
+def page_ref_open1(c, n):
+    opening(c, n, 'Index (p.1): written on the page', 'Page 1 is a right-hand page, so the index starts opposite the inside cover. The page numbers are a ready-made budget: copy them as-is.',
+            None, (1, p1_index))
+
+
+def page_ref_open2(c, n):
+    opening(c, n, 'Index (p.2) and subnetting reference (p.3)', 'Red = lines you draw (column lines, header rule). Blue = your writing. Each row of text sits on one ruled line.',
+            (2, p2_index), (3, p3_subnet))
+
+
+def page_ref_open3(c, n):
+    opening(c, n, 'Reference: ports (p.4) and AD / route codes (p.5)', 'Copy these once; add to them whenever Anki or a quiz catches you out.',
+            (4, p4_ports), (5, p5_ad))
+
+
+def page_ref_open4(c, n):
+    opening(c, n, 'Reference: IOS modes (p.6) and "the book is out of date" (p.7)', 'Leave the bottom of p.7 empty. Every ⚠ box in the app\'s chapter pages becomes a new line.',
+            (6, p6_ios), (7, p7_outdated))
+
+
+def page_ref_open5(c, n):
+    opening(c, n, 'Reference: OSI chart (p.8) and tab key (p.9)', 'Colour the boxes on p.9 with the actual sticky flag you choose for each domain.',
+            (8, p8_osi), (9, p9_tabs))
+
+
+# ================================================================= PAGE 9 · back section
 
 def page_back(c, n):
     W, H = letter
     x, y = 40, H - 46
-    text(c, x, y, 'The index (pp. 1–2) and the back section (pp. 136–154)', 'Sans-B', 18)
-    y -= 30
-    y = heading(c, x, y, 'Index: what pages 1–2 look like', 12.5)
-    idx = [['Topic', 'Page', 'Tab', 'Topic', 'Page', 'Tab'],
-           ['Ch 1 Binary, hex, IP & masks', '10', 'Fund.', 'VLANs & trunks', '72', 'Access'],
-           ['Ch 2 OSI, TCP/IP, encapsulation', '12', 'Fund.', 'Spanning Tree / RSTP', '76', 'Access'],
-           ['Ch 3 Media (skim)', '16', 'Fund.', 'OSPF', '84', 'IP Conn.'],
-           ['Ch 5 Ethernet frames', '18', 'Fund.', 'IPv6', '90', 'IP Conn.'],
-           ['…', '', '', '…', '', '']]
-    y = table(c, x, y, W - 80, idx, [0.3, 0.07, 0.11, 0.3, 0.07, 0.15], size=8.2)
-    y -= 6
-    y = para(c, x, y, W - 80, 'Use the left-hand (even) page number of each spread. Write the entry as soon as you start a spread, not at the end. Enter the same page number in the app (Book → chapter → Notebook page, or Book → Notebook for everything); it suggests the next free page.', size=8.5, color=MUTED)
-
+    text(c, x, y, 'The back section (pp. 136–154)', 'Sans-B', 18)
     y -= 18
+    text(c, x, y, 'Both logs start at the back of the notebook and grow towards the middle, so they never collide with your spreads.', 'Sans', 10, MUTED)
+    y -= 28
     y = heading(c, x, y, 'Mistake log: start on p.154 and work backwards', 12.5)
     y = para(c, x, y, W - 80, 'One line per missed question from Boson, the app\'s chapter quizzes or Anki. The app keeps its own Weak topics list automatically; this log is for the misses you want to think through. Three misses on the same topic → redo that spread from memory.', size=8.5, color=MUTED) - 2
     ml = [['Date', 'Source', 'Topic', 'What I got wrong', 'The right idea', 'Spread'],
-          ['11/14', 'Quiz ch 8', 'Subnetting', 'Said 6 subnets for 3 borrowed bits', '2³ = 8 (subnet zero is allowed)', 'p.24'],
+          ['11/14', 'Quiz ch 8', 'Subnetting', 'Said 6 subnets for 3 borrowed bits', '2³ = 8 (subnet zero is allowed)', 'p.30'],
           ['11/16', 'Anki', 'Ports', 'TFTP = TCP 69', 'TFTP = UDP 69 (no handshake)', 'p.4'],
           ['', '', '', '', '', ''], ['', '', '', '', '', '']]
     y = table(c, x, y, W - 80, ml, [0.08, 0.11, 0.14, 0.27, 0.3, 0.1], size=8.2)
@@ -739,9 +894,12 @@ def main():
     c.setTitle('CCNA Notebook Guide')
     c.setAuthor('CCNA-Q')
     c.setSubject('How to structure a Cornell-style CCNA study notebook')
-    pages = [page_overview, page_ruling, page_example, page_reference, page_reference2, page_back, page_routine]
+    pages = [page_overview, page_ruling, page_example,
+             page_ref_open1, page_ref_open2, page_ref_open3, page_ref_open4, page_ref_open5,
+             page_back, page_routine]
+    landscape_pages = {page_ruling, page_example, page_ref_open1, page_ref_open2, page_ref_open3, page_ref_open4, page_ref_open5}
     for i, fn in enumerate(pages, 1):
-        if fn in (page_ruling, page_example):
+        if fn in landscape_pages:
             c.setPageSize(landscape(letter))
         else:
             c.setPageSize(letter)
