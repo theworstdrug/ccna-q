@@ -128,7 +128,7 @@ function lessonRow(l) {
 
 // ---------- notebook index (mirrors pages 1–2 of the paper notebook) ----------
 
-const NB_PAGES = 160;
+const NB_PAGES = 154; // sin's notebook: 77 sheets
 // "12" means a two-page spread (12–13); "83-88" means through 88.
 const lastPage = v => {
   const nums = (String(v || '').match(/\d+/g) || []).map(Number);
@@ -162,7 +162,7 @@ function renderNotebook(root) {
     summary.replaceChildren(
       h('div.panel-head', {}, h('h2', {}, `Filled up to p.${used} of ${NB_PAGES}`), h('span.muted.small', {}, `next spread: p.${nextFreePage()}`)),
       h('div.bar', {}, h('span', { style: { width: `${Math.min(100, (used / NB_PAGES) * 100)}%` } })),
-      h('p.muted.small', {}, 'Pages 1–9 hold the index, reference pages and tab key. Spreads start on even (left-hand) pages. The back pages (160 down to 140) hold the mistake log and weekly reviews.'));
+      h('p.muted.small', {}, 'Pages 1–9 hold the index, reference pages and tab key. Spreads start on even (left-hand) pages. The back pages (154 down to 136) hold the mistake log and weekly reviews.'));
   };
   drawSummary();
 

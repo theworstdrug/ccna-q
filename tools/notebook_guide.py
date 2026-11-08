@@ -17,6 +17,7 @@ from reportlab.lib.styles import ParagraphStyle
 
 ROOT = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
 OUT = os.path.join(ROOT, 'docs', 'notebook-guide.pdf')
+PAGES = 154  # this notebook: 77 sheets
 DEJAVU = '/usr/share/fonts/truetype/dejavu'
 FREE = '/usr/share/fonts/truetype/freefont'
 
@@ -202,7 +203,7 @@ def page_overview(c, n):
     x, y = 40, H - 54
     text(c, x, y, 'CCNA Notebook Guide', 'Sans-B', 26)
     y -= 22
-    text(c, x, y, 'How to set up and fill the pen+GEAR 1-subject notebook (80 sheets = 160 pages, college ruled)', 'Sans', 10.5, MUTED)
+    text(c, x, y, f'How to set up and fill the pen+GEAR 1-subject notebook ({PAGES // 2} sheets = {PAGES} pages, college ruled)', 'Sans', 10.5, MUTED)
     y -= 14
     text(c, x, y, 'Method: Cornell notes · one topic per two-page spread · cues are questions · summary after the lab', 'Sans', 10.5, MUTED)
 
@@ -212,11 +213,11 @@ def page_overview(c, n):
     bx, bw, bh = x, W - 80, 34
     segs = [(1, 2, 'Index', HexColor('#ffd166')), (3, 9, 'Reference', HexColor('#ef8354')),
             (10, 71, 'Book chapters  (ch 1–20, in order)', HexColor('#4f9dde')),
-            (72, 139, 'Beyond the book  (JITL topics)', HexColor('#43aa8b')),
-            (140, 160, 'Back section', HexColor('#b07bd6'))]
+            (72, 135, 'Beyond the book  (JITL topics)', HexColor('#43aa8b')),
+            (136, PAGES, 'Back section', HexColor('#b07bd6'))]
     for a, b, label, col in segs:
-        sx = bx + (a - 1) / 160 * bw
-        sw = (b - a + 1) / 160 * bw
+        sx = bx + (a - 1) / PAGES * bw
+        sw = (b - a + 1) / PAGES * bw
         c.setFillColor(col)
         c.rect(sx, y - bh, sw, bh, stroke=0, fill=1)
         c.setStrokeColor(white)
@@ -224,9 +225,9 @@ def page_overview(c, n):
         c.line(sx, y - bh, sx, y)
         if sw > 60:
             text(c, sx + sw / 2, y - bh / 2 - 3.5, label, 'Sans-B', 8.5, white, 'c')
-    for p in (10, 72, 140):
-        text(c, bx + (p - 1) / 160 * bw, y - bh - 11, f'p.{p}', 'Sans', 7.5, MUTED, 'c')
-    text(c, bx + bw, y - bh - 11, 'p.160', 'Sans', 7.5, MUTED, 'r')
+    for p in (10, 72, 136):
+        text(c, bx + (p - 1) / PAGES * bw, y - bh - 11, f'p.{p}', 'Sans', 7.5, MUTED, 'c')
+    text(c, bx + bw, y - bh - 11, f'p.{PAGES}', 'Sans', 7.5, MUTED, 'r')
     # the two thin segments get a key instead of a label
     ky = y - bh - 25
     for i, (lab, col) in enumerate([('Index p.1–2', HexColor('#ffd166')), ('Reference p.3–9', HexColor('#ef8354'))]):
@@ -238,9 +239,9 @@ def page_overview(c, n):
     rows = [['Pages', 'Section', 'What goes there'],
             ['1–2', 'Index', 'Topic → page number. Fill it in as you go. (Mirror in the app: Book → Notebook.)'],
             ['3–9', 'Reference', 'pp.3–8: subnetting, ports, AD/route codes, IOS modes, "book is outdated" list, OSI chart (pages 4–5 of this guide). p.9: your tab-colour key.'],
-            ['10–71', 'Book chapters', 'One spread (2–4 pages) per chapter you read or skim, starting on an even page. Skip chapters 4, 14 and Appendix A.'],
-            ['72–139', 'Beyond the book', 'VLANs, STP, EtherChannel, OSPF, IPv6, FHRP, NAT, services, QoS, security, wireless, automation'],
-            ['140–160', 'Back section', 'Start on p.160 and work backwards: mistake log, weekly review log (page 6)']]
+            ['10–71', 'Book chapters', 'One spread per chapter you read or skim, starting on an even page: about 3–4 pages each, 6 for Ch 8 and Ch 20. Skip chapters 4, 14 and Appendix A.'],
+            ['72–135', 'Beyond the book', 'About 4 pages each: VLANs, STP, EtherChannel, OSPF, IPv6, FHRP, NAT, services, QoS, security, wireless, automation'],
+            ['136–154', 'Back section', 'Work backwards: mistake log from p.154, weekly review log from p.145 (page 6)']]
     y = table(c, x, y, W - 80, rows, [0.11, 0.17, 0.72], size=8.8)
 
     # setup checklist + tabs
@@ -248,12 +249,12 @@ def page_overview(c, n):
     colw = (W - 80 - 20) / 2
     y0 = y
     yy = heading(c, x, y, '2  Setup tonight (≈20 min)')
-    steps = ['Write the page number in the corner box of every page, 1–160. Odd numbers are right-hand pages, even numbers left-hand.',
+    steps = [f'Write the page number in the corner box of every page, 1–{PAGES}. Odd numbers are right-hand pages, even numbers left-hand.',
              'Pages 1–2: write INDEX at the top. Draw 3 columns: Topic | Page | Tab.',
              'Pages 3–8: write the reference titles (see pages 4–5). Page 9: copy the tab-colour key from box 3.',
              'Rule the first chapter spread (pages 10–11) as shown on page 2. Every spread starts on an even page.',
-             'Page 160: write MISTAKE LOG. Page 150: WEEKLY REVIEW.',
-             'Stick a tab on p.3 (Reference) and p.160 (Mistakes).',
+             'Page 154: write MISTAKE LOG. Page 145: WEEKLY REVIEW.',
+             'Stick a tab on p.3 (Reference) and p.154 (Mistakes).',
              'Don\'t use the perforations. Torn-out pages break the index.']
     for i, s in enumerate(steps, 1):
         badge(c, x + 8, yy + 3.5, i, 7)
@@ -638,7 +639,7 @@ def page_reference2(c, n):
 def page_back(c, n):
     W, H = letter
     x, y = 40, H - 46
-    text(c, x, y, 'The index (pp. 1–2) and the back section (pp. 140–160)', 'Sans-B', 18)
+    text(c, x, y, 'The index (pp. 1–2) and the back section (pp. 136–154)', 'Sans-B', 18)
     y -= 30
     y = heading(c, x, y, 'Index: what pages 1–2 look like', 12.5)
     idx = [['Topic', 'Page', 'Tab', 'Topic', 'Page', 'Tab'],
@@ -652,7 +653,7 @@ def page_back(c, n):
     y = para(c, x, y, W - 80, 'Use the left-hand (even) page number of each spread. Write the entry as soon as you start a spread, not at the end. Enter the same page number in the app (Book → chapter → Notebook page, or Book → Notebook for everything); it suggests the next free page.', size=8.5, color=MUTED)
 
     y -= 18
-    y = heading(c, x, y, 'Mistake log: start on p.160 and work backwards', 12.5)
+    y = heading(c, x, y, 'Mistake log: start on p.154 and work backwards', 12.5)
     y = para(c, x, y, W - 80, 'One line per missed question from Boson, the app\'s chapter quizzes or Anki. The app keeps its own Weak topics list automatically; this log is for the misses you want to think through. Three misses on the same topic → redo that spread from memory.', size=8.5, color=MUTED) - 2
     ml = [['Date', 'Source', 'Topic', 'What I got wrong', 'The right idea', 'Spread'],
           ['11/14', 'Quiz ch 8', 'Subnetting', 'Said 6 subnets for 3 borrowed bits', '2³ = 8 (subnet zero is allowed)', 'p.24'],
@@ -661,7 +662,7 @@ def page_back(c, n):
     y = table(c, x, y, W - 80, ml, [0.08, 0.11, 0.14, 0.27, 0.3, 0.1], size=8.2)
 
     y -= 18
-    y = heading(c, x, y, 'Weekly review log: start on p.150 and work backwards', 12.5)
+    y = heading(c, x, y, 'Weekly review log: start on p.145 and work backwards', 12.5)
     y = para(c, x, y, W - 80, 'Every Sunday at 4 pm, one row per week. Compare the hours with the plan\'s split (60/40 theory/practice in weeks 1–2, 40/60 after that, 20/80 in week 12).', size=8.5, color=MUTED) - 2
     wr = [['Wk', 'Hours (theory / practice)', 'Chapters / topics done', 'Lab redone from memory', 'Weakest topic → next week'],
           ['1', '5 / 4', 'Ch 1, 2, 5', 'Lab 1 Hello, switch', 'hex conversions'],
@@ -705,7 +706,7 @@ def page_routine(c, n):
     yl = heading(c, x, yl, 'Sunday, 4 pm weekly review', 12)
     yl = bullets(c, x, yl, colw, ['Cover the notes column on every spread from this week and answer the cues.',
                                   'Redo one lab from memory, without the brief. Check it with the app\'s Check button.',
-                                  'Fill one weekly-review row (p.150 backwards).',
+                                  'Fill one weekly-review row (p.145 backwards).',
                                   'Any cue you missed: rewrite that bit of the notes, or redo the spread.'], size=9.2)
 
     xr = x + colw + 20
