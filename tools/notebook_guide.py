@@ -145,8 +145,10 @@ def card(c, x, y, w, h, title, sub=None, fill=SOFT):
 
 # ---------------------------------------------------------------- notebook page drawing
 
-def notebook_page(c, x, y, w, h, holes='left', lines=28):
-    """A college-ruled page with its printed pink margin. Returns line positions (top→bottom)."""
+def notebook_page(c, x, y, w, h, side='R', lines=28, num=None):
+    """A college-ruled page. side='L' is a left-hand (even) page, 'R' a right-hand (odd) page.
+    Draws the printed pink margin, binding holes on the inner edge and the page-number box
+    in the top outer corner. Returns (line positions top→bottom, line spacing, box rect)."""
     c.setFillColor(white)
     c.setStrokeColor(HexColor('#9aa5b1'))
     c.setLineWidth(0.8)
@@ -159,17 +161,27 @@ def notebook_page(c, x, y, w, h, holes='left', lines=28):
     for ly in ys:
         c.line(x + 2, ly, x + w - 2, ly)
     # printed margin (narrow) – the cue line you draw is wider
-    mx = x + w * 0.11 if holes == 'left' else x + w * 0.11
+    mx = x + w * 0.11
     c.setStrokeColor(MARGIN)
     c.setLineWidth(0.6)
     c.line(mx, y + 2, mx, y + h - 2)
-    # punched holes
-    hx = x + w * 0.045
+    # punched holes sit on the binding (inner) edge
+    hx = x + w * 0.045 if side == 'R' else x + w * 0.955
     c.setFillColor(HexColor('#e9edf2'))
     c.setStrokeColor(HexColor('#b8c1cc'))
     for f in (0.15, 0.5, 0.85):
         c.circle(hx, y + h * f, w * 0.018, stroke=1, fill=1)
-    return ys, sp
+    # page-number box in the top outer corner
+    bw, bh = w * 0.13, top_gap * 0.62
+    bx = x + w - bw - 5 if side == 'R' else x + 5
+    by = y + h - bh - (top_gap - bh) / 2
+    c.setFillColor(white)
+    c.setStrokeColor(HexColor('#7d8896'))
+    c.setLineWidth(0.8)
+    c.rect(bx, by, bw, bh, stroke=1, fill=1)
+    if num is not None:
+        text(c, bx + bw / 2, by + bh / 2 - 3.5, str(num), 'Sans-I', 10, PEN, 'c')
+    return ys, sp, (bx, by, bw, bh)
 
 
 def shade(c, x, y, w, h, color):
@@ -198,10 +210,10 @@ def page_overview(c, n):
     y -= 34
     y = heading(c, x, y, '1  Page map: decide where everything goes before you write')
     bx, bw, bh = x, W - 80, 34
-    segs = [(1, 2, 'Index', HexColor('#ffd166')), (3, 8, 'Reference', HexColor('#ef8354')),
-            (9, 70, 'Book chapters  (ch 1–20, in order)', HexColor('#4f9dde')),
-            (71, 140, 'Beyond the book  (JITL topics)', HexColor('#43aa8b')),
-            (141, 160, 'Back section', HexColor('#b07bd6'))]
+    segs = [(1, 2, 'Index', HexColor('#ffd166')), (3, 9, 'Reference', HexColor('#ef8354')),
+            (10, 71, 'Book chapters  (ch 1–20, in order)', HexColor('#4f9dde')),
+            (72, 139, 'Beyond the book  (JITL topics)', HexColor('#43aa8b')),
+            (140, 160, 'Back section', HexColor('#b07bd6'))]
     for a, b, label, col in segs:
         sx = bx + (a - 1) / 160 * bw
         sw = (b - a + 1) / 160 * bw
@@ -212,12 +224,12 @@ def page_overview(c, n):
         c.line(sx, y - bh, sx, y)
         if sw > 60:
             text(c, sx + sw / 2, y - bh / 2 - 3.5, label, 'Sans-B', 8.5, white, 'c')
-    for p in (9, 71, 141):
+    for p in (10, 72, 140):
         text(c, bx + (p - 1) / 160 * bw, y - bh - 11, f'p.{p}', 'Sans', 7.5, MUTED, 'c')
     text(c, bx + bw, y - bh - 11, 'p.160', 'Sans', 7.5, MUTED, 'r')
     # the two thin segments get a key instead of a label
     ky = y - bh - 25
-    for i, (lab, col) in enumerate([('Index p.1–2', HexColor('#ffd166')), ('Reference p.3–8', HexColor('#ef8354'))]):
+    for i, (lab, col) in enumerate([('Index p.1–2', HexColor('#ffd166')), ('Reference p.3–9', HexColor('#ef8354'))]):
         kx = bx + i * 92
         c.setFillColor(col)
         c.rect(kx, ky - 1, 8, 8, stroke=0, fill=1)
@@ -225,10 +237,10 @@ def page_overview(c, n):
     y -= bh + 42
     rows = [['Pages', 'Section', 'What goes there'],
             ['1–2', 'Index', 'Topic → page number. Fill it in as you go. (Mirror in the app: Book → Notebook.)'],
-            ['3–8', 'Reference', 'Subnetting table, ports, AD/route codes, IOS modes, "the book is outdated" list, OSI chart (page 5 of this guide)'],
-            ['9–70', 'Book chapters', 'One spread (2–4 pages) per chapter you read or skim. Skip chapters 4, 14 and Appendix A.'],
-            ['71–140', 'Beyond the book', 'VLANs, STP, EtherChannel, OSPF, IPv6, FHRP, NAT, services, QoS, security, wireless, automation'],
-            ['141–160', 'Back section', 'Start on p.160 and work backwards: mistake log, weekly review log (page 6)']]
+            ['3–9', 'Reference', 'pp.3–8: subnetting, ports, AD/route codes, IOS modes, "book is outdated" list, OSI chart (pages 4–5 of this guide). p.9: your tab-colour key.'],
+            ['10–71', 'Book chapters', 'One spread (2–4 pages) per chapter you read or skim, starting on an even page. Skip chapters 4, 14 and Appendix A.'],
+            ['72–139', 'Beyond the book', 'VLANs, STP, EtherChannel, OSPF, IPv6, FHRP, NAT, services, QoS, security, wireless, automation'],
+            ['140–160', 'Back section', 'Start on p.160 and work backwards: mistake log, weekly review log (page 6)']]
     y = table(c, x, y, W - 80, rows, [0.11, 0.17, 0.72], size=8.8)
 
     # setup checklist + tabs
@@ -236,10 +248,10 @@ def page_overview(c, n):
     colw = (W - 80 - 20) / 2
     y0 = y
     yy = heading(c, x, y, '2  Setup tonight (≈20 min)')
-    steps = ['Number every page in the bottom outer corner, 1–160.',
+    steps = ['Write the page number in the corner box of every page, 1–160. Odd numbers are right-hand pages, even numbers left-hand.',
              'Pages 1–2: write INDEX at the top. Draw 3 columns: Topic | Page | Tab.',
-             'Pages 3–8: write the reference titles at the top of each (see page 5).',
-             'Rule the first chapter spread (pages 9–10) as shown on page 2.',
+             'Pages 3–8: write the reference titles (see pages 4–5). Page 9: copy the tab-colour key from box 3.',
+             'Rule the first chapter spread (pages 10–11) as shown on page 2. Every spread starts on an even page.',
              'Page 160: write MISTAKE LOG. Page 150: WEEKLY REVIEW.',
              'Stick a tab on p.3 (Reference) and p.160 (Mistakes).',
              'Don\'t use the perforations. Torn-out pages break the index.']
@@ -266,17 +278,17 @@ def page_overview(c, n):
 
 # ================================================================= PAGE 2 · ruling a spread (landscape)
 
-def draw_spread_frame(c, X, Y, PW, PH):
-    """Two notebook pages side by side with the Cornell lines drawn in. Returns geometry."""
+def draw_spread_frame(c, X, Y, PW, PH, nums=(None, None)):
+    """Two notebook pages side by side (left = even, right = odd). Returns geometry."""
     gap = 10
     L = (X, Y)
     R = (X + PW + gap, Y)
-    ysL, sp = notebook_page(c, L[0], L[1], PW, PH)
-    ysR, _ = notebook_page(c, R[0], R[1], PW, PH)
+    ysL, sp, boxL = notebook_page(c, L[0], L[1], PW, PH, 'L', num=nums[0])
+    ysR, _, boxR = notebook_page(c, R[0], R[1], PW, PH, 'R', num=nums[1])
     cue = PW * 0.30   # ≈2.5" on an 8" page
     head_y = ysL[0] + sp * 0.2
     sum_top = ysR[-7]  # last 6 lines
-    return dict(L=L, R=R, ys=ysL, sp=sp, cue=cue, head_y=head_y, sum_top=sum_top, gap=gap)
+    return dict(L=L, R=R, ys=ysL, sp=sp, cue=cue, head_y=head_y, sum_top=sum_top, gap=gap, boxL=boxL, boxR=boxR)
 
 
 def page_ruling(c, n):
@@ -315,9 +327,15 @@ def page_ruling(c, n):
     pencil(c, rx + 2, top, rx + PW - 2, top, 1.2)
 
     # header text
-    text(c, lx + 12, top + 9, 'Topic · Ch # · week', 'Sans-B', 8.5, INK)
-    text(c, lx + PW - 8, top + 9, 'book p.__', 'Sans', 8, MUTED, 'r')
+    bL, bR = g['boxL'], g['boxR']
+    text(c, bL[0] + bL[2] + 8, top + 9, 'Topic · Ch # · week', 'Sans-B', 8.5, INK)
+    text(c, lx + PW - 18, top + 9, 'book p.__', 'Sans', 8, MUTED, 'r')
     text(c, rx + 12, top + 9, 'Lab · diagram · commands', 'Sans-B', 8.5, INK)
+    text(c, bL[0] + bL[2] / 2, bL[1] + bL[3] / 2 - 3, 'even', 'Sans', 7, MUTED, 'c')
+    text(c, bR[0] + bR[2] / 2, bR[1] + bR[3] / 2 - 3, 'odd', 'Sans', 7, MUTED, 'c')
+    # callout for the corner boxes
+    arrow(c, bR[0] - 30, ly + PH + 22, bR[0] + bR[2] / 2 - 4, bR[1] + bR[3] + 2, PENCIL, 0.9, 4)
+    text(c, bR[0] - 34, ly + PH + 19, 'page # goes in the corner box', 'Sans-B', 7.5, PENCIL, 'r')
 
     # zone labels
     def zl(xc, yc, num, title, sub):
@@ -326,7 +344,7 @@ def page_ruling(c, n):
         for i, s in enumerate(sub):
             text(c, xc, yc - 16 - i * 10, s, 'Sans', 7.6, MUTED, 'c')
 
-    badge(c, lx + PW / 2 + 30, top + 12, 1, 8)
+    badge(c, lx + PW / 2 + 34, top + 12, 1, 8)
     zl(lx + cue + (PW - cue) / 2, ly + PH * 0.5, 2, 'NOTES', ['while reading or', 'watching the video', 'facts, explanations,', 'book page refs'])
     zl(rx + cue + (PW - cue) / 2, g['sum_top'] + (top - g['sum_top']) / 2, 3, 'LAB', ['diagram first, then', 'commands → what', 'each one does'])
     zl(rx + PW / 2, ry + (g['sum_top'] - ry) / 2 + 2, 4, 'SUMMARY', ['after the lab: 2–4 sentences, own words'])
@@ -350,7 +368,7 @@ def page_ruling(c, n):
     yy = H - 104
     yy = heading(c, lgx, yy, 'The 5 zones', 13)
     legend = [
-        ('header', 1, 'Header line', 'Topic, chapter, week, book page. Lets the index point here.'),
+        ('header', 1, 'Header line', 'Topic, chapter, week and book page, written beside the corner box (the page number goes in the box). Lets the index point here.'),
         ('notes', 2, 'Notes (left page)', 'While reading or watching. Short phrases, arrows, your own abbreviations. Leave gaps to add to later.'),
         ('lab', 3, 'Lab (right page)', 'Draw the topology first. Then every command you ran, with what it does in plain words.'),
         ('summary', 4, 'Summary', 'Write it only after the lab, not after the video. If you can\'t summarise it, redo the lab.'),
@@ -402,7 +420,7 @@ def page_example(c, n):
 
     PW, PH = 340, 470
     X, Y = 46, 50
-    g = draw_spread_frame(c, X, Y, PW, PH)
+    g = draw_spread_frame(c, X, Y, PW, PH, nums=(12, 13))
     (lx, ly), (rx, ry) = g['L'], g['R']
     ys, cue, top = g['ys'], g['cue'], g['ys'][0]
     pencil(c, lx + cue, ly + 2, lx + cue, top)
@@ -411,10 +429,10 @@ def page_example(c, n):
     pencil(c, lx + 2, top, lx + PW - 2, top, 1.1)
     pencil(c, rx + 2, top, rx + PW - 2, top, 1.1)
 
-    text(c, lx + 40, top + 8, 'Ch 2 · Encapsulation · wk 1', 'Sans-B', 9, PEN)
-    text(c, lx + PW - 8, top + 8, 'book p.__   nb p.12', 'Sans-I', 8, PEN, 'r')
+    bL = g['boxL']
+    text(c, bL[0] + bL[2] + 10, top + 8, 'Ch 2 · Encapsulation · wk 1', 'Sans-B', 9, PEN)
+    text(c, lx + PW - 22, top + 8, 'book p.__', 'Sans-I', 8, PEN, 'r')
     text(c, rx + 40, top + 8, 'Lab: watch encapsulation hop by hop', 'Sans-B', 9, PEN)
-    text(c, rx + PW - 8, top + 8, 'p.13', 'Sans-I', 8, PEN, 'r')
 
     cx, nx = lx + 40, lx + cue + 6
     left = [
@@ -620,18 +638,18 @@ def page_reference2(c, n):
 def page_back(c, n):
     W, H = letter
     x, y = 40, H - 46
-    text(c, x, y, 'The index (pp. 1–2) and the back section (pp. 141–160)', 'Sans-B', 18)
+    text(c, x, y, 'The index (pp. 1–2) and the back section (pp. 140–160)', 'Sans-B', 18)
     y -= 30
     y = heading(c, x, y, 'Index: what pages 1–2 look like', 12.5)
     idx = [['Topic', 'Page', 'Tab', 'Topic', 'Page', 'Tab'],
-           ['Ch 1 Binary, hex, IP & masks', '9', 'Fund.', 'VLANs & trunks', '71', 'Access'],
-           ['Ch 2 OSI, TCP/IP, encapsulation', '12', 'Fund.', 'Spanning Tree / RSTP', '75', 'Access'],
-           ['Ch 3 Media (skim)', '16', 'Fund.', 'OSPF', '83', 'IP Conn.'],
-           ['Ch 5 Ethernet frames', '18', 'Fund.', 'IPv6', '89', 'IP Conn.'],
+           ['Ch 1 Binary, hex, IP & masks', '10', 'Fund.', 'VLANs & trunks', '72', 'Access'],
+           ['Ch 2 OSI, TCP/IP, encapsulation', '12', 'Fund.', 'Spanning Tree / RSTP', '76', 'Access'],
+           ['Ch 3 Media (skim)', '16', 'Fund.', 'OSPF', '84', 'IP Conn.'],
+           ['Ch 5 Ethernet frames', '18', 'Fund.', 'IPv6', '90', 'IP Conn.'],
            ['…', '', '', '…', '', '']]
     y = table(c, x, y, W - 80, idx, [0.3, 0.07, 0.11, 0.3, 0.07, 0.15], size=8.2)
     y -= 6
-    y = para(c, x, y, W - 80, 'Write the entry as soon as you start a spread, not at the end. Enter the same page number in the app (Book → chapter → Notebook page, or Book → Notebook for everything); it suggests the next free page.', size=8.5, color=MUTED)
+    y = para(c, x, y, W - 80, 'Use the left-hand (even) page number of each spread. Write the entry as soon as you start a spread, not at the end. Enter the same page number in the app (Book → chapter → Notebook page, or Book → Notebook for everything); it suggests the next free page.', size=8.5, color=MUTED)
 
     y -= 18
     y = heading(c, x, y, 'Mistake log: start on p.160 and work backwards', 12.5)

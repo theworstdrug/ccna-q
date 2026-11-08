@@ -143,10 +143,12 @@ function allNbEntries() {
   return out;
 }
 
-/** First free page after the reserved front section (index + reference = pages 1–8). */
+/** Next free spread: after the front section (index + reference = pages 1–9),
+ *  always an even page, because odd pages are right-hand pages and spreads start on the left. */
 export function nextFreePage() {
   const used = allNbEntries().map(lastPage).filter(Number.isFinite);
-  return Math.max(8, ...used) + 1;
+  const n = Math.max(9, ...used) + 1;
+  return n % 2 ? n + 1 : n;
 }
 
 function renderNotebook(root) {
@@ -156,11 +158,11 @@ function renderNotebook(root) {
   });
   const summary = h('div', {});
   const drawSummary = () => {
-    const used = Math.max(8, ...allNbEntries().map(lastPage).filter(Number.isFinite));
+    const used = Math.max(9, ...allNbEntries().map(lastPage).filter(Number.isFinite));
     summary.replaceChildren(
-      h('div.panel-head', {}, h('h2', {}, `Filled up to p.${used} of ${NB_PAGES}`), h('span.muted.small', {}, `next free: p.${used + 1}`)),
+      h('div.panel-head', {}, h('h2', {}, `Filled up to p.${used} of ${NB_PAGES}`), h('span.muted.small', {}, `next spread: p.${nextFreePage()}`)),
       h('div.bar', {}, h('span', { style: { width: `${Math.min(100, (used / NB_PAGES) * 100)}%` } })),
-      h('p.muted.small', {}, 'Pages 1–8 are reserved for the index and reference pages; the back pages (from 160 down) hold the mistake log and weekly reviews.'));
+      h('p.muted.small', {}, 'Pages 1–9 hold the index, reference pages and tab key. Spreads start on even (left-hand) pages. The back pages (160 down to 140) hold the mistake log and weekly reviews.'));
   };
   drawSummary();
 
