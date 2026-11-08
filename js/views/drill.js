@@ -52,10 +52,11 @@ function session(root, id) {
 
   const paintStreak = () => { const s = st(); streakEl.replaceChildren('🔥 ', h('strong', {}, s.streak), h('span.muted', {}, ` · best ${s.best}`)); };
 
-  const record = ok => {
+  const record = (ok, val) => {
     update(x => {
       const s = x.drills[id] = { ...st() };
       s.n++; if (ok) s.ok++;
+      if (!ok) s.misses = [...(s.misses || []), { q: item.q, a: item.a, pick: String(val), at: Date.now() }].slice(-20);
       s.streak = ok ? s.streak + 1 : 0;
       s.best = Math.max(s.best, s.streak);
     });
@@ -68,7 +69,7 @@ function session(root, id) {
     answered = true;
     const ok = checkAnswer(item, val);
     buzz(ok ? 8 : 30);
-    record(ok);
+    record(ok, val);
     fb.replaceChildren(
       h('div.verdict' + (ok ? '.ok' : '.bad'), {}, ok ? '✓ Correct' : `✗ Answer: ${item.a}`),
       item.why ? h('ul.why', {}, [].concat(item.why).map(l => h('li', {}, l))) : null);

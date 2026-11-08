@@ -88,7 +88,7 @@ export function render(root) {
     const ok = check(q, val);
     update(s => {
       const x = s.subnet;
-      x.history.push({ type: q.type, ok, ms, at: Date.now(), day: todayKey() });
+      x.history.push({ type: q.type, ok, ms, at: Date.now(), day: todayKey(), ...(ok ? {} : { q: q.q, a: q.a }) });
       if (x.history.length > 2000) x.history = x.history.slice(-2000);
       x.streak = ok ? x.streak + 1 : 0;
       x.best = Math.max(x.best, x.streak);

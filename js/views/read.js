@@ -87,9 +87,9 @@ function renderReader(root, id) {
     const sel = window.getSelection();
     if (sel && !sel.isCollapsed && sel.toString().trim().split(/\s+/).length > 1) return; // phrase handled by selection button
     const t = e.target.closest('.t');
-    if (t) { termSheet(t.dataset.id, body, refreshSpans); return; }
+    if (t) { termSheet(t.dataset.id, body, refreshSpans, id); return; }
     const w = e.target.closest('.w');
-    if (w) newTermSheet(w.textContent, body, () => { renderBody(text, body); refreshStats(); });
+    if (w) newTermSheet(w.textContent, body, () => { renderBody(text, body); refreshStats(); }, id);
   });
 
   // Save a selected phrase
@@ -105,7 +105,7 @@ function renderReader(root, id) {
     const s = window.getSelection().toString().trim().replace(/\s+/g, ' ');
     phraseBtn.hidden = true;
     window.getSelection().removeAllRanges();
-    newTermSheet(s, body, () => { renderBody(text, body); refreshStats(); });
+    newTermSheet(s, body, () => { renderBody(text, body); refreshStats(); }, id);
   });
 
   const cues = (lesson.cues || []).length ? cueBlock(lesson.cues) : null;
@@ -241,7 +241,7 @@ function cueBlock(cues) {
 
 // ---------- term sheets ----------
 
-export function termSheet(id, body, onChange) {
+export function termSheet(id, body, onChange, lessonId) {
   const t = getTerm(id);
   if (!t) return;
   const c = db().terms[id];
@@ -254,6 +254,7 @@ export function termSheet(id, body, onChange) {
       const cc = card(id);
       if (s !== undefined) setStatus(cc, s);
       if (!cc.ctx && ctx) cc.ctx = ctx;
+      if (lessonId && !cc.lesson) cc.lesson = lessonId; // so the notebook list knows which spread it belongs to
       cc.note = note.value.trim();
       if (t.custom) cc.def = defEl.value.trim();
     });
@@ -267,6 +268,9 @@ export function termSheet(id, body, onChange) {
     t.aliases?.length ? h('p.muted.small', {}, `Also: ${t.aliases.slice(0, 6).join(', ')}`) : null,
     ctx ? h('blockquote.ctx', {}, ctx) : null,
     note,
+    h('label.check.on-paper', {},
+      h('input', { type: 'checkbox', checked: !!c?.onPaper, onchange: e => { update(() => { card(id).onPaper = e.target.checked; }); onChange?.(id); } }),
+      h('span', {}, '📓 In my notebook', h('span.muted.small', {}, '  (keeps it off the "To write" list)'))),
     h('div.status-row', {},
       btn(1, '1', '.s1'), btn(2, '2', '.s2'), btn(3, '3', '.s3'), btn(4, '4', '.s4'),
       btn(5, '✓ Known', '.known'), btn(-1, 'Ignore', '.ignore')),
@@ -278,7 +282,7 @@ export function termSheet(id, body, onChange) {
   { onClose: () => {} });
 }
 
-function newTermSheet(word, body, onDone) {
+function newTermSheet(word, body, onDone, lessonId) {
   const termIn = h('input.input', { value: word });
   const def = h('textarea.input', { rows: 3, placeholder: 'Definition in your own words' });
   sheet(h('div.term-sheet', {},
@@ -293,6 +297,7 @@ function newTermSheet(word, body, onDone) {
           const c = card(id);
           c.def = def.value.trim();
           c.ctx = sentenceAt(body, text);
+          if (lessonId) c.lesson = lessonId;
           setStatus(c, s);
         });
         closeSheet();
@@ -316,6 +321,7 @@ function renderGlossary(root) {
       if (filter === 'learning' && !(s >= 1 && s <= 4)) return false;
       if (filter === 'known' && s !== 5) return false;
       if (filter === 'custom' && !t.custom) return false;
+      if (filter === 'notebook' && !db().terms[t.id]?.onPaper) return false;
       if (q && !(`${t.term} ${t.aliases?.join(' ')} ${t.def}`.toLowerCase().includes(q))) return false;
       return true;
     }).sort((a, b) => a.term.localeCompare(b.term));
@@ -324,7 +330,7 @@ function renderGlossary(root) {
       h('span.muted.small.gloss-def', {}, t.def.slice(0, 90) + (t.def.length > 90 ? '…' : '')))));
     if (!items.length) listEl.append(h('p.muted', {}, 'Nothing here yet.'));
   };
-  const chips = ['all', 'new', 'learning', 'known', 'custom'].map(f => h('button.chip-btn' + (f === filter ? '.on' : ''), {
+  const chips = ['all', 'new', 'learning', 'known', 'custom', 'notebook'].map(f => h('button.chip-btn' + (f === filter ? '.on' : ''), {
     onclick: e => { filter = f; chips.forEach(c => c.classList.remove('on')); e.target.classList.add('on'); draw(); },
   }, f));
   root.append(

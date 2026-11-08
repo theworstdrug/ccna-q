@@ -5,6 +5,7 @@ import { db, update } from '../store.js';
 import { CHAPTERS, chapterByN, readable } from '../data/book.js';
 import { buzz, swipe } from '../gestures.js';
 import { chStatus } from './book.js';
+import { hash } from '../sync.js';
 
 const shuffle = a => { const x = [...a]; for (let i = x.length - 1; i > 0; i--) { const j = Math.floor(Math.random() * (i + 1)); [x[i], x[j]] = [x[j], x[i]]; } return x; };
 
@@ -85,7 +86,7 @@ function start(root, pool, exam, c) {
       s.quiz[key] = { best: Math.max(prev.best, pct), last: pct, attempts: prev.attempts + 1, at: Date.now() };
       for (const m of missed) {
         const ch = chapterByN(m.item.ch);
-        s.missed.push({ topic: `Ch ${ch.n}: ${ch.title}`, note: m.item.q, at: Date.now(), src: 'quiz' });
+        s.missed.push({ id: hash(`${Date.now()}|${m.item.q}`), topic: `Ch ${ch.n}: ${ch.title}`, note: m.item.q, pick: m.pick, answer: m.item.a, ch: String(ch.n), at: Date.now(), src: exam ? 'exam' : 'quiz' });
       }
       if (s.missed.length > 400) s.missed = s.missed.slice(-400);
     });
@@ -96,7 +97,8 @@ function start(root, pool, exam, c) {
       h('div.q-result', {},
         h('div.q-score' + (pct >= 82 ? '.pass' : ''), {}, `${pct}%`),
         h('p', {}, `${right} of ${answers.length} correct${exam ? ` in ${Math.round((Date.now() - t0) / 60000)} min` : ''}.`),
-        h('p.muted.small', {}, pct >= 82 ? 'Solid. Mark the chapter done if you haven\'t.' : 'Missed questions were added to Weak topics on Today.')),
+        h('p.muted.small', {}, pct >= 82 ? 'Solid. Mark the chapter done if you haven\'t.' : 'Missed questions were added to Weak topics on Today.'),
+        missed.length ? h('a.btn.ghost.small', { href: '#/notebook/write' }, `📓 ${missed.length} added to your mistake-log list`) : null),
       exam ? h('section.panel', {}, h('h2', {}, 'By chapter'), h('table.mini', {}, h('tbody', {},
         Object.entries(byCh).sort((a, b) => a[1][0] / a[1][1] - b[1][0] / b[1][1]).map(([n, [r, t]]) => h('tr' + (r / t < 0.7 ? '.weak' : ''), {},
           h('td', {}, h('a', { href: `#/book/${n}` }, `Ch ${n} ${chapterByN(n).title}`)), h('td', {}, `${r}/${t}`)))))) : null,

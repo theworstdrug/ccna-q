@@ -4,6 +4,7 @@
 import { h, toast } from '../ui.js';
 import { db, update } from '../store.js';
 import { chapterByN } from '../data/book.js';
+import { hash } from '../sync.js';
 import { lessonById } from '../data/lessons.js';
 import { swipe, buzz } from '../gestures.js';
 
@@ -17,9 +18,12 @@ function autosize(el) {
 }
 
 export function render(root, [n]) {
-  const c = chapterByN(n);
-  if (!c) { root.append(h('p', {}, 'Chapter not found.')); return; }
+  // A book chapter, or a beyond-the-book lesson (cues captured from paper can be filed under either).
+  const lesson = lessonById(n);
+  const c = chapterByN(n) || (lesson && { n: lesson.id, title: lesson.title, lessons: [lesson.id], isLesson: true });
+  if (!c) { root.append(h('p', {}, 'Topic not found.')); return; }
   const key = c.n;
+  const label = c.isLesson ? c.title : `Ch ${c.n}: ${c.title}`;
   const get = () => db().notes[key] || blank();
   const save = fn => update(s => { s.notes[key] = s.notes[key] || blank(); fn(s.notes[key]); });
 
@@ -88,7 +92,7 @@ export function render(root, [n]) {
       const grade = ok => {
         buzz(ok ? 8 : 25);
         if (ok) got++;
-        else update(s => s.missed.push({ topic: `Ch ${c.n}: ${c.title}`, note: cue.q, at: Date.now(), src: 'notes' }));
+        else update(s => s.missed.push({ id: hash(`${Date.now()}|${cue.q}`), topic: label, note: cue.q, answer: cue.a || '', ch: String(key), at: Date.now(), src: 'self-test' }));
         i++; step();
       };
       const btns = h('div.grades.two', { hidden: true },
@@ -108,7 +112,7 @@ export function render(root, [n]) {
   draw();
   root.append(
     h('header.view-head.reader-head', {},
-      h('a.icon-btn', { href: `#/book/${c.n}`, 'aria-label': 'Back' }, '‹'),
-      h('div.grow', {}, h('div.muted.small', {}, `Chapter ${c.n} · Cornell notes`), h('h1.reader-title', {}, c.title))),
+      h('a.icon-btn', { href: c.isLesson ? `#/read/${encodeURIComponent(c.n)}` : `#/book/${c.n}`, 'aria-label': 'Back' }, '‹'),
+      h('div.grow', {}, h('div.muted.small', {}, c.isLesson ? 'Beyond the book · Cornell notes' : `Chapter ${c.n} · Cornell notes`), h('h1.reader-title', {}, c.title))),
     seg, body);
 }

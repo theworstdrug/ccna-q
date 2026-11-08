@@ -9,6 +9,7 @@ import { LABS } from '../sim/labs.js';
 import { getTerm } from '../terms.js';
 import { CHAPTERS, BOOK_DEADLINE, readable } from '../data/book.js';
 import { bookProgress, chStatus } from './book.js';
+import { buildOutbox } from '../sync.js';
 
 export function render(root) {
   const s = db();
@@ -56,8 +57,9 @@ export function render(root) {
       h('a.btn.small.ghost', { href: '#/subnet' }, 'Subnet drill'),
       continueLink(s))));
 
-  // ---------- book ----------
+  // ---------- book + notebook ----------
   root.append(bookPanel(s));
+  root.append(notebookTodo());
 
   // ---------- this week ----------
   if (wk >= 1 && wk <= 12) {
@@ -101,6 +103,22 @@ export function render(root) {
     root.append(h('section.panel', {}, h('h2', {}, 'Coming up'),
       h('ul.plain', {}, upcoming.map(m => h('li' + (m.big ? '.big' : ''), {}, h('strong', {}, fmtDate(parseDate(m.date))), ` · ${m.text} `, h('span.muted.small', {}, `(${daysUntil(m.date, now)}d)`))))));
   }
+}
+
+function notebookTodo() {
+  const items = buildOutbox();
+  const by = k => items.filter(i => k.includes(i.kind)).length;
+  return h('section.panel', {},
+    h('div.panel-head', {}, h('h2', {}, '📓 For your notebook'), h('span.muted.small', {}, items.length ? `${items.length} to write` : 'all caught up')),
+    items.length ? h('div.nb-chips', {},
+      by(['mistake']) ? h('span.pill', {}, `${by(['mistake'])} mistake-log lines`) : null,
+      by(['term', 'cue', 'summary']) ? h('span.pill', {}, `${by(['term', 'cue', 'summary'])} for spreads`) : null,
+      by(['drill']) ? h('span.pill', {}, `${by(['drill'])} reference updates`) : null,
+      by(['weekly']) ? h('span.pill', {}, `${by(['weekly'])} weekly review`) : null) : null,
+    items.slice(0, 2).map(i => h('div.nb-pend', {}, h('div.grow', {}, h('div', {}, i.title), h('div.muted.small', {}, `📍 ${i.where}${i.page ? ` · ${i.page}` : ''}`)))),
+    h('div.quick', {},
+      h('a.btn.small' + (items.length ? '' : '.ghost'), { href: '#/notebook/write' }, items.length ? 'Open the list' : 'Notebook'),
+      h('a.btn.small.ghost', { href: '#/notebook/add' }, '+ From my notebook')));
 }
 
 function bookPanel(s) {

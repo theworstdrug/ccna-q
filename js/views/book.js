@@ -12,6 +12,7 @@ import { DRILLS } from '../drills.js';
 import { labById } from '../sim/labs.js';
 import { swipe, buzz } from '../gestures.js';
 import { termSheet, importSheet } from './read.js';
+import { nextFreePage, topicStats, markWritten, spreadLabel } from '../sync.js';
 
 const STATUS = ['todo', 'reading', 'done'];
 const STATUS_LABEL = { todo: 'Not started', reading: 'Reading', done: 'Done' };
@@ -36,7 +37,7 @@ export function bookProgress() {
 }
 
 export function render(root, [n]) {
-  if (n === '_notebook') return renderNotebook(root);
+  if (n === '_notebook') { location.replace('#/notebook/index'); return null; }
   if (n !== undefined && chapterByN(n)) return renderChapter(root, chapterByN(n));
   return renderList(root);
 }
@@ -53,7 +54,7 @@ function renderList(root) {
   root.append(
     h('header.view-head', {}, h('h1', {}, 'Book'),
       h('div.head-actions', {},
-        h('a.btn.ghost.small', { href: '#/book/_notebook' }, '📓 Notebook'),
+        h('a.btn.ghost.small', { href: '#/notebook' }, '📓 Notebook'),
         h('a.btn.ghost.small', { href: '#/read/_glossary' }, 'Glossary'))),
     h('section.panel.book-hero', {},
       h('div.muted.small', {}, BOOK_TITLE),
@@ -78,7 +79,7 @@ function renderList(root) {
       onclick: e => {
         e.preventDefault(); e.stopPropagation();
         const nx = STATUS[(STATUS.indexOf(chStatus(c.n)) + 1) % 3];
-        update(s => { s.book[c.n] = { ...(s.book[c.n] || {}), status: nx }; });
+        update(s => { s.book[c.n] = { ...(s.book[c.n] || {}), status: nx, ...(nx === 'done' ? { doneAt: Date.now() } : {}) }; });
         buzz();
         dot.className = `st-dot ${nx}`;
         row.classList.toggle('done', nx === 'done');
@@ -126,64 +127,31 @@ function lessonRow(l) {
       done ? h('span.done-tick', {}, '✓') : h('span.chev', {}, '›')));
 }
 
-// ---------- notebook index (mirrors pages 1–2 of the paper notebook) ----------
+// ---------- notebook bridge on the chapter page ----------
 
-const NB_PAGES = 154; // sin's notebook: 77 sheets
-// "12" means a two-page spread (12–13); "83-88" means through 88.
-const lastPage = v => {
-  const nums = (String(v || '').match(/\d+/g) || []).map(Number);
-  if (!nums.length) return 0;
-  return nums.length === 1 ? nums[0] + 1 : Math.max(...nums);
-};
-
-function allNbEntries() {
-  const out = [];
-  for (const c of CHAPTERS) if (chState(c.n).nb) out.push(chState(c.n).nb);
-  for (const v of Object.values(db().nb || {})) if (v) out.push(v);
-  return out;
-}
-
-/** Next free spread: after the front section (index + reference = pages 1–9),
- *  always an even page, because odd pages are right-hand pages and spreads start on the left. */
-export function nextFreePage() {
-  const used = allNbEntries().map(lastPage).filter(Number.isFinite);
-  const n = Math.max(9, ...used) + 1;
-  return n % 2 ? n + 1 : n;
-}
-
-function renderNotebook(root) {
-  const nbInput = (value, onSave, label, plan) => h('input.input.page-in.nb-in', {
-    inputmode: 'numeric', placeholder: plan || '—', value: value || '', 'aria-label': `Notebook page for ${label}`,
-    onchange: e => { onSave(e.target.value.trim()); drawSummary(); },
-  });
-  const summary = h('div', {});
-  const drawSummary = () => {
-    const used = Math.max(9, ...allNbEntries().map(lastPage).filter(Number.isFinite));
-    summary.replaceChildren(
-      h('div.panel-head', {}, h('h2', {}, `Filled up to p.${used} of ${NB_PAGES}`), h('span.muted.small', {}, `next spread: p.${nextFreePage()}`)),
-      h('div.bar', {}, h('span', { style: { width: `${Math.min(100, (used / NB_PAGES) * 100)}%` } })),
-      h('p.muted.small', {}, 'Pages 1–9 hold the index, reference pages and tab key. Spreads start on even (left-hand) pages. The back pages (154 down to 136) hold the mistake log and weekly reviews.'));
+function notebookPanel(c) {
+  const key = String(c.n);
+  const box = h('section.panel.nb-panel', {});
+  const draw = () => {
+    const st = topicStats(key);
+    const q = st.quiz;
+    const stat = (n, l, cls = '') => h('div.nb-stat' + cls, {}, h('div.nb-stat-n', {}, n), h('div.muted.small', {}, l));
+    box.replaceChildren(
+      h('div.panel-head', {}, h('h2', {}, '📓 Notebook'), h('span.muted.small', {}, `spread ${spreadLabel(key)}`)),
+      h('div.nb-stats', {},
+        stat(q ? `${q.best}%` : '—', q ? `quiz best · last ${q.last}%` : 'quiz not taken', q && q.best < 70 ? '.bad' : q && q.best >= 82 ? '.ok' : ''),
+        stat(st.misses, `misses · ${st.missesOnPaper} on paper`, st.misses > st.missesOnPaper ? '.warn' : ''),
+        stat(st.struggling, `struggling terms · ${st.onPaper} in notebook`, st.struggling ? '.warn' : '')),
+      st.pending.length ? h('div.nb-pending', {}, h('div.muted.small', {}, `To write for this chapter (${st.pending.length})`),
+        st.pending.slice(0, 4).map(it => h('div.nb-pend', {},
+          h('div.grow', {}, h('div', {}, it.title), h('div.muted.small', {}, `📍 ${it.where}`)),
+          h('button.btn.small.ghost', { onclick: () => { markWritten(it); buzz(10); draw(); window.dispatchEvent(new Event('ccnaq:nav')); } }, '✓')))) : h('p.muted.small', {}, 'Nothing waiting to be written for this chapter.'),
+      h('div.quick', {},
+        h('a.btn.small', { href: `#/notebook/add/${key}` }, '+ From my notebook'),
+        st.pending.length > 4 ? h('a.btn.small.ghost', { href: '#/notebook/write' }, `All ${st.pending.length} items`) : null));
   };
-  drawSummary();
-
-  const row = (num, title, value, onSave, href, plan) => h('div.nb-row', {},
-    h('a.nb-title', { href }, num != null ? h('span.ch-num', {}, num) : null, title),
-    nbInput(value, onSave, title, plan));
-
-  const extra = LESSONS.filter(l => !inBook.has(l.id) && !l.chapter);
-  root.append(
-    h('header.view-head.reader-head', {},
-      h('a.icon-btn', { href: '#/book', 'aria-label': 'Back to book' }, '‹'),
-      h('div.grow', {}, h('div.muted.small', {}, 'Paper notebook'), h('h1.reader-title', {}, 'Notebook index'))),
-    h('section.panel', {}, summary,
-      h('a.btn.ghost.small', { href: 'docs/notebook-guide.pdf', target: '_blank', rel: 'noopener' }, '📄 Notebook formatting guide (PDF)')),
-    h('p.hint', {}, 'Grey numbers are the planned budget from the notebook guide. Type the pages you actually used (e.g. 12 or 12–15); the same numbers go on paper pages 1–2.'),
-    h('h2.section-title', {}, 'Book chapters'),
-    h('div.nb-list', {}, CHAPTERS.filter(readable).map(c => row(c.n, c.title, chState(c.n).nb,
-      v => update(x => { x.book[c.n] = { ...(x.book[c.n] || {}), nb: v }; }), `#/book/${c.n}`, NB_PLAN[c.n]))),
-    h('h2.section-title', {}, 'Beyond the book'),
-    h('div.nb-list', {}, extra.map(l => row(null, l.title, db().nb?.[l.id],
-      v => update(x => { x.nb = { ...(x.nb || {}), [l.id]: v }; if (!v) delete x.nb[l.id]; }), `#/read/${encodeURIComponent(l.id)}`, NB_PLAN[l.id]))));
+  draw();
+  return box;
 }
 
 // ---------- chapter page ----------
@@ -264,6 +232,8 @@ function renderChapter(root, c) {
         h('a.prac-card', { href: `#/notes/${n}` }, h('div.prac-ico', {}, '📝'), h('div', {}, h('strong', {}, 'Cornell notes'), h('div.muted.small', {}, nCues ? `${nCues} cue questions` : 'Cues, notes, summary'))),
         ...(c.drills || []).map(d => DRILLS[d] && h('a.prac-card', { href: DRILLS[d].href || `#/drills/${d}` }, h('div.prac-ico', {}, '⚡'), h('div', {}, h('strong', {}, DRILLS[d].title), h('div.muted.small', {}, DRILLS[d].desc)))),
         ...(c.labs || []).map(id => labById(id) && h('a.prac-card', { href: `#/lab/${id}` }, h('div.prac-ico', {}, '🔌'), h('div', {}, h('strong', {}, labById(id).title), h('div.muted.small', {}, db().labs.done?.[id] ? 'Completed ✓' : 'Lab')))))),
+
+    readable(c) ? notebookPanel(c) : null,
 
     termIds.length ? h('section.panel', {}, h('h2', {}, `Key terms (${termIds.length})`), h('p.hint', {}, 'Tap to see the definition and rate it.'), termChips) : null,
 

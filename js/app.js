@@ -9,9 +9,11 @@ import * as lab from './views/lab.js';
 import * as plan from './views/plan.js';
 import * as quiz from './views/quiz.js';
 import * as notes from './views/notes.js';
+import * as notebook from './views/notebook.js';
 import { db } from './store.js';
 import { isDue } from './srs.js';
 import { getTerm } from './terms.js';
+import { outboxCount } from './sync.js';
 
 const ICON = {
   today: 'M3 12l9-8 9 8M5 10v10h5v-6h4v6h5V10',
@@ -25,7 +27,7 @@ const ICON = {
 const TABS = [['today', 'Today'], ['book', 'Book'], ['review', 'Review'], ['drills', 'Drills'], ['lab', 'Lab']];
 const ROUTES = {
   today: [today, 'today'], plan: [plan, 'today'],
-  book: [book, 'book'], read: [read, 'book'], quiz: [quiz, 'book'], notes: [notes, 'book'],
+  book: [book, 'book'], read: [read, 'book'], quiz: [quiz, 'book'], notes: [notes, 'book'], notebook: [notebook, 'book'],
   review: [review, 'review'],
   drills: [drill, 'drills'], subnet: [subnet, 'drills'],
   lab: [lab, 'lab'],
@@ -40,9 +42,11 @@ const dueCount = () => Object.entries(db().terms).filter(([id, c]) => isDue(c) &
 function renderNav(active) {
   nav.replaceChildren(...TABS.map(([id, label]) => {
     const due = id === 'review' ? dueCount() : 0;
+    const nb = id === 'book' ? outboxCount() : 0;
     return h('a.tab' + (id === active ? '.active' : ''), { href: `#/${id}`, 'aria-label': label, 'aria-current': id === active ? 'page' : null },
       h('span.tab-ico', { html: `<svg viewBox="0 0 24 24" width="24" height="24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><path d="${ICON[id]}"/></svg>` }),
       due ? h('span.badge', {}, due > 99 ? '99+' : due) : null,
+      nb ? h('span.badge.soft', { title: 'Items to write in your notebook' }, nb > 99 ? '99+' : nb) : null,
       h('span.tab-label', {}, label));
   }));
 }
