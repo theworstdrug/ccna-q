@@ -19,11 +19,6 @@ export const LOCAL_MODELS = {
     mirror: 'models/granite-4.0-1b',
     note: 'IBM, Apache-2.0. Most accurate in our CCNA test (5/5 with Lammle passages). Phones and computers.',
   },
-  granite350: {
-    id: 'onnx-community/granite-4.0-350m-ONNX-web', name: 'Granite 4.0 350M', size: 350, ctx: 3000,
-    mirror: 'models/granite-4.0-350m',
-    note: 'IBM, Apache-2.0. Small enough for a phone\'s memory. Simpler answers than the 1B.',
-  },
   gemma4: {
     id: 'onnx-community/gemma-4-E2B-it-ONNX', name: 'Gemma 4 E2B', size: 3110, ctx: 6000,
     note: 'Google, Apache-2.0. Faster on a good GPU and writes tighter answers, but scored 4/5 (it followed a misleading passage). Computers with ~4 GB of graphics memory. Downloads from Hugging Face.',
@@ -33,8 +28,8 @@ export const LOCAL_MODELS = {
 const KEY = 'ccnaq.localModel';
 /** Phone-sized layout: the AI settings are hidden and the small model is always used. */
 export const isPhone = () => !!globalThis.matchMedia?.('(max-width: 820px) and (pointer: coarse)').matches;
-/** Phones get the small model: the 1B's 1.25 GB of weights is more memory than iOS allows a web app. */
-export const PHONE_KEY = 'granite'; // pending: a smaller model that is still accurate (see tests)
+/** Phones use Granite 1B too (it may be too big for some iPhones' memory; the crash guard catches that). */
+export const PHONE_KEY = 'granite'; // no smaller model passed the CCNA accuracy test (350M–700M all invented facts)
 export const defaultLocalKey = () => (isPhone() ? PHONE_KEY : 'granite');
 export const localKey = () => {
   if (isPhone()) return PHONE_KEY;
