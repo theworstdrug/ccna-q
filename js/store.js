@@ -18,6 +18,7 @@ const defaults = () => ({
   drills: {},       // drillId -> { n, ok, streak, best }
   nb: {},           // lessonId -> paper notebook page (topics beyond the book)
   anki: {},         // export sources/options, custom cards, last export hashes
+  chat: { threads: [], cur: null }, // chat threads { id, title, at, msgs }
   cueBank: [],      // every suggested cue ever generated { q, topic, src, engine, at, used, hidden }
   settings: { examDate: '2027-01-29', cutoff: '2027-02-02', fontScale: 1 },
 });

@@ -12,6 +12,8 @@ import * as notes from './views/notes.js';
 import * as notebook from './views/notebook.js';
 import * as anki from './views/anki.js';
 import * as cues from './views/cues.js';
+import * as chat from './views/chat.js';
+import * as library from './views/library.js';
 import { db } from './store.js';
 import { isDue } from './srs.js';
 import { getTerm } from './terms.js';
@@ -25,16 +27,18 @@ const ICON = {
   review: 'M4 6h16v12H4zM8 10h8M8 14h5',
   drills: 'M13 2L4 14h7l-1 8 9-12h-7z',
   lab: 'M5 4h5v5H5zM14 15h5v5h-5zM14 4h5v5h-5zM7.5 9v6.5H14M16.5 9v6',
+  chat: 'M4 5.5A2.5 2.5 0 0 1 6.5 3h11A2.5 2.5 0 0 1 20 5.5v8a2.5 2.5 0 0 1-2.5 2.5H10l-4.5 4v-4h0A2.5 2.5 0 0 1 4 13.5zM8.5 8.5h7M8.5 11.5h4.5',
 };
 
 // Bottom navigation (5 tabs, thumb-friendly) and which tab each route belongs to.
-const TABS = [['today', 'Today'], ['book', 'Book'], ['review', 'Review'], ['drills', 'Drills'], ['lab', 'Lab']];
+const TABS = [['today', 'Today'], ['book', 'Book'], ['chat', 'Chat'], ['review', 'Review'], ['drills', 'Drills'], ['lab', 'Lab']];
 const ROUTES = {
   today: [today, 'today'], plan: [plan, 'today'],
   book: [book, 'book'], read: [read, 'book'], quiz: [quiz, 'book'], notes: [notes, 'book'], notebook: [notebook, 'book'], cues: [cues, 'book'],
   review: [review, 'review'], anki: [anki, 'review'],
   drills: [drill, 'drills'], subnet: [subnet, 'drills'],
   lab: [lab, 'lab'],
+  chat: [chat, 'chat'], library: [library, 'chat'],
 };
 
 const main = document.getElementById('main');
@@ -52,7 +56,7 @@ function renderNav(active) {
     h('span.brand-text', {}, h('strong', {}, 'CCNA-Q'), h('small', {}, '200-301 v1.1')));
   const foot = h('div.nav-foot', {},
     h('a.nav-count', { href: '#/plan' }, h('strong', {}, Math.max(0, dExam)), h('span', {}, ' days to the exam')),
-    h('div.nav-keys', {}, 'Alt/⌥ + 1–5 to switch'));
+    h('div.nav-keys', {}, 'Alt/⌥ + 1–6 to switch'));
   nav.replaceChildren(brand, ...TABS.map(([id, label], k) => {
     const due = id === 'review' ? dueCount() : 0;
     const nb = id === 'book' ? outboxCount() : 0;
@@ -65,7 +69,7 @@ function renderNav(active) {
   lastActive = active;
 }
 
-// Desktop: Alt/⌥ + 1–5 switches tabs (ignored while typing).
+// Desktop: Alt/⌥ + 1–6 switches tabs (ignored while typing).
 document.addEventListener('keydown', e => {
   if (!e.altKey || e.ctrlKey || e.metaKey || e.target.matches?.('input, textarea, select')) return;
   const k = Number(e.code?.replace('Digit', '') || e.key);

@@ -67,7 +67,7 @@ export function cuePanel({ topic, sources, onAdded, heading = '✨ Suggested cue
     h('span', {}));
   const drawRefs = async () => {
     const n = (await listDocs().catch(() => [])).length;
-    refBox.lastChild.replaceChildren(n ? `Use my ${n} reference PDF${n > 1 ? 's' : ''}` : 'Use my reference PDFs (none yet)', ' · ', h('a', { href: '#/cues' }, 'manage'));
+    refBox.lastChild.replaceChildren(n ? `Use my ${n} reference PDF${n > 1 ? 's' : ''}` : 'Use my reference PDFs (none yet)', ' · ', h('a', { href: '#/library' }, 'manage'));
   };
   const aiInfo = h('div.ai-info', {},
     h('p.muted.small', {}, `${MODEL.name} runs on this device: free, no account, nothing sent anywhere. The first use downloads it (~${MODEL.size.webgpu}–${MODEL.size.wasm} MB), then it works offline.`),

@@ -76,3 +76,46 @@ test('background keeps only the sentences that match the passage', async () => {
   assert.equal(asBackground([], 'x'), '');
   assert.ok(asBackground([{ text: 'Spanning tree blocks redundant ports. '.repeat(40) }], 'spanning tree ports').length <= 480);
 });
+
+test('book clean-up strips running heads, reads printed page numbers and chapters', async () => {
+  const { cleanBook } = await import('../js/refs.js');
+  const pages = [];
+  for (let n = 1; n <= 40; n++) {
+    const printed = n + 10;
+    const head = n % 2 ? `Router and Switch Interfaces ${printed}` : `${printed}\nChapter 6 ■ Cisco’s Internetworking Operating System (IOS)`;
+    pages.push({ p: n, text: `${head}\nThe interface command on page ${printed} enters interface configuration mode so you can set an address.\n${['Duplex', 'Speed', 'Shutdown', 'Description'][n % 4]} settings matter on interface ${n}.` });
+  }
+  pages[3].text = 'Contents\n1\n2\n3\n4\n5\n6\n7\n8\nChapter 1';
+  const out = cleanBook(pages);
+  assert.ok(!out.some(x => /Router and Switch Interfaces|Chapter 6 ■/.test(x.text)), 'running heads removed');
+  const pg20 = out.find(x => x.pp === 20);
+  assert.equal(pg20.p, 30, "printed page = PDF page + offset");
+  assert.equal(pg20.chapter, 'Chapter 6 Cisco’s Internetworking Operating System (IOS)');
+  assert.ok(!out.some(x => x.pp === 4), 'table-of-contents page dropped');
+});
+
+test('stemming lets related words meet; key points quote the best sentences', async () => {
+  const { stem, words } = await import('../js/cuegen.js');
+  const { keyPoints } = await import('../js/refs.js');
+  assert.equal(stem('election'), stem('elected'));
+  assert.equal(stem('ospf'), 'ospf');
+  assert.equal(stem('802.1q'), '802.1q');
+  assert.deepEqual(words('Switches flooding frames'), ['switch', 'flood', 'frame']);
+  const hits = [{ name: 'Book', p: 750, text: 'In OSPF, a DR and BDR must be elected for each broadcast multi-access network. Lunch is at noon today for everyone in the office. S1(config)#router ospf 1 S1(config-router)#network 10.0.0.0 0.255.255.255 area 0' },
+    { name: 'Book', p: 791, text: 'Router priority The priority is an 8-bit value used to aid in the election of the DR and BDR. A. 224.0.0.5 B. 224.0.0.6 C. 224.0.0.9' }];
+  const kp = keyPoints(hits, 'How does OSPF elect the DR and BDR?');
+  assert.deepEqual(kp.map(k => k.p), [750, 791]);
+  assert.ok(kp.every(k => !/Lunch|config/.test(k.s)));
+});
+
+test('cloud helpers: repo names and part files', async () => {
+  const { parseRepo, docFiles } = await import('../js/cloud.js');
+  assert.equal(parseRepo('me/ccna-library'), 'me/ccna-library');
+  assert.equal(parseRepo('https://github.com/me/ccna-library.git'), 'me/ccna-library');
+  assert.equal(parseRepo('nonsense'), null);
+  const doc = { id: 'x', chunks: Array.from({ length: 1500 }, (_, i) => ({ i, p: i, text: 't' })) };
+  const { files, parts } = docFiles(doc);
+  assert.equal(parts, 3);
+  assert.equal(Object.keys(files).length, 3);
+  assert.equal(JSON.parse(files['library/docs/x/2.json']).chunks.length, 100);
+});

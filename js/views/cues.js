@@ -3,7 +3,7 @@
 
 import { h, toast } from '../ui.js';
 import { db, update } from '../store.js';
-import { listDocs, importPdf, deleteDoc } from '../refs.js';
+import { listDocs } from '../refs.js';
 import { bankList } from '../cuebank.js';
 import { topicOptions, topicTitle, topicKey, currentTopic } from '../sync.js';
 import { cuePanel, topicSources, pdfSources, bankRow } from './cuepanel.js';
@@ -52,29 +52,8 @@ export function render(root, [arg]) {
     panelSlot.replaceChildren(p);
   };
 
-  // ---------- reference library ----------
+  // ---------- reference library (managed in Library & AI) ----------
   const libList = h('div.ref-list', {});
-  const libStatus = h('div.muted.small', {});
-  const libBar = h('div.bar', { hidden: true }, h('span', { style: { width: '0%' } }));
-  const file = h('input', {
-    type: 'file', accept: 'application/pdf,.pdf', multiple: true, hidden: true,
-    onchange: async e => {
-      const files = [...e.target.files];
-      e.target.value = '';
-      for (const f of files) {
-        libBar.hidden = false;
-        try {
-          const doc = await importPdf(f, (p, label) => { libStatus.textContent = `${f.name}: ${label}`; libBar.firstChild.style.width = `${Math.round(p * 100)}%`; });
-          toast(`Added ${doc.name}: ${doc.pages} pages`);
-        } catch (err) {
-          toast(`${f.name}: ${err.message || err}`, 4500);
-        }
-      }
-      libBar.hidden = true;
-      libStatus.textContent = '';
-      drawLib(); drawSrcSel(); drawPanel();
-    },
-  });
   const drawLib = async () => {
     let docs = [];
     try { docs = await listDocs(); } catch { libList.replaceChildren(h('p.muted.small', {}, 'This browser blocks local storage for files (private mode?).')); return; }
@@ -82,7 +61,7 @@ export function render(root, [arg]) {
       h('div.ref-ico', {}, 'PDF'),
       h('div.grow', {}, h('div.ref-name', {}, d.name), h('div.muted.small', {}, `${d.pages} pages · ${d.chunks.length} passages · ${fmtKB(d.size)} · ${new Date(d.added).toLocaleDateString()}`)),
       h('button.btn.small.ghost', { onclick: () => { source = { kind: 'pdf', doc: d }; drawSrcSel(); drawPanel(); panelSlot.scrollIntoView({ behavior: 'smooth', block: 'start' }); } }, 'Cues'),
-      h('button.icon-btn.tiny', { 'aria-label': `Remove ${d.name}`, onclick: async () => { if (!confirm(`Remove "${d.name}" from your references?`)) return; await deleteDoc(d.id); if (source.doc?.id === d.id) source = { kind: 'topic' }; drawLib(); drawSrcSel(); drawPanel(); } }, '✕')))
+      null))
       : [h('p.muted.small', {}, 'No PDFs yet.')]));
   };
 
@@ -112,10 +91,10 @@ export function render(root, [arg]) {
         panelSlot,
         h('button.btn.small.ghost', { onclick: () => { location.hash = `#/notes/${encodeURIComponent(topic)}`; } }, 'Open these Cornell notes ›')),
       h('section.panel', {},
-        h('div.panel-head', {}, h('h2', {}, '📚 Reference PDFs'), h('span.muted.small', {}, 'stay on this device')),
-        h('p.hint', {}, 'Add PDFs with real text (official guides, cheat sheets, exported notes). The cue generator reads the most relevant pages as background, and you can ask for cues straight from a PDF. Scanned image-only PDFs need OCR first.'),
-        h('button.btn', { onclick: () => file.click() }, '+ Add PDFs'), file, libStatus, libBar, libList,
-        h('p.muted.small', {}, 'PDFs aren\'t in the JSON backup; the cues made from them are.')),
+        h('div.panel-head', {}, h('h2', {}, '📚 Reference PDFs'), h('span.muted.small', {}, 'synced through your cloud library')),
+        h('p.hint', {}, 'The cue generator reads the most relevant pages of your books as background, and you can ask for cues straight from one.'),
+        libList,
+        h('a.btn.small.ghost', { href: '#/library' }, 'Add or sync books in Library & AI ›')),
       h('section.panel.cue-bank', {},
         h('div.panel-head', {}, h('h2', {}, '🗂 Saved cues'), bankCount),
         h('div.row.wrap', {}, bankSel,

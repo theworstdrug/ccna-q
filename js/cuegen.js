@@ -99,7 +99,18 @@ export function ruleCues(text, max = 6, seed = 0) {
 // ---------------------------------------------------------------- staying on topic
 
 const STOP = new Set('the a an and or of to in on for with is are be by as at it its this that these those from what why how when which who does do did can could would should will if then than there their they you your into about between each other more most some such only also not no use used using uses happens happen happening purpose role difference different work works way network networks networking device devices data explain mean means'.split(' '));
-export const words = s => (String(s).toLowerCase().match(/[a-z0-9][a-z0-9.\-]*[a-z0-9]|[a-z0-9]/g) || []).filter(w => w.length > 1 && !STOP.has(w));
+/** Light stemming so "elect", "elected" and "election" meet. Leaves acronyms and CLI words alone. */
+export function stem(w) {
+  if (w.length <= 4 || /\d/.test(w)) return w;
+  if (w.endsWith('ies')) return `${w.slice(0, -3)}y`;
+  if (w.endsWith('sses')) return w.slice(0, -2);
+  if (/(s|x|z|ch|sh)es$/.test(w) && w.length - 2 >= 4) return w.slice(0, -2);
+  for (const suf of ['ations', 'ation', 'ions', 'ion', 'ings', 'ing', 'ers', 'er', 'ed', 's']) {
+    if (w.endsWith(suf) && w.length - suf.length >= 4 && !(suf === 's' && w.endsWith('ss'))) return w.slice(0, -suf.length);
+  }
+  return w;
+}
+export const words = s => (String(s).toLowerCase().match(/[a-z0-9][a-z0-9.\-]*[a-z0-9]|[a-z0-9]/g) || []).filter(w => w.length > 1 && !STOP.has(w)).map(stem);
 
 /**
  * Drop questions that wander off the passage: no shared content word with it, or naming a
