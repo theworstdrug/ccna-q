@@ -1,11 +1,10 @@
-// Library & AI: your reference books (synced through a private GitHub repo) and the optional
-// Claude tutor key.
+// Library & AI: your reference books (synced through your private books repo) and, on computers,
+// the on-device AI model. On phones the AI settings are hidden: the small model is always used.
 
 import { h, toast } from '../ui.js';
 import { listDocs, importPdf } from '../refs.js';
-import { cloudConfig, setCloudConfig, cloudOn, parseRepo, testCloud, syncLibrary, uploadDoc, removeDoc, lastSync } from '../cloud.js';
-import { tutorKey, setTutorKey, TUTOR_MODEL } from '../tutor.js';
-import { LOCAL_MODELS, localKey, setLocalKey, loadLocal, localReady, hasWebGPU, defaultLocalKey, isPhone } from '../localllm.js';
+import { cloudConfig, setCloudConfig, cloudOn, parseRepo, testCloud, syncLibrary, uploadDoc, removeDoc, lastSync, DEFAULT_REPO } from '../cloud.js';
+import { LOCAL_MODELS, localKey, setLocalKey, loadLocal, localReady, hasWebGPU, defaultLocalKey, isPhone, modelStored } from '../localllm.js';
 
 const fmtKB = n => (n > 1e6 ? `${(n / 1e6).toFixed(1)} MB` : `${Math.round(n / 1e3)} KB`);
 const ago = t => { if (!t) return 'never'; const m = Math.round((Date.now() - t) / 60000); return m < 1 ? 'just now' : m < 60 ? `${m} min ago` : `${Math.round(m / 60)} h ago`; };
@@ -55,56 +54,73 @@ export function render(root) {
       }, '✕'))) : [h('p.muted.small', {}, 'No books yet.')]));
   };
 
-  // ---------- cloud ----------
-  const cfg = cloudConfig() || {};
-  const repoIn = h('input.input', { placeholder: 'you/ccna-library', value: cfg.repo || '', autocapitalize: 'off', autocorrect: 'off', spellcheck: false });
-  const branchIn = h('input.input', { placeholder: 'main', value: cfg.branch || '' });
-  const tokenIn = h('input.input', { type: 'password', placeholder: cfg.token ? '•••••••• (saved)' : 'github_pat_…', autocomplete: 'off' });
-  const cloudStatus = h('div.small', {});
-  const syncBtn = h('button.btn.small', { onclick: () => doSync() }, '↻ Sync now');
+  // ---------- cloud (defaults to your private books repo) ----------
+  const cfg = cloudConfig();
+  const repoIn = h('input.input', { placeholder: DEFAULT_REPO, value: cfg.repo === DEFAULT_REPO ? '' : cfg.repo, autocapitalize: 'off', autocorrect: 'off', spellcheck: false });
+  const branchIn = h('input.input', { placeholder: 'main', value: cfg.branch === 'main' ? '' : cfg.branch });
+  const tokenIn = h('input.input', { type: 'password', placeholder: 'github_pat_…', autocomplete: 'off' });
+  const cloudStatus = h('div.small.cloud-status', {});
+  const connectBox = h('div.connect-box', {});
+  const syncBtn = h('button.btn.small.ghost', { onclick: () => doSync() }, '↻ Sync');
   const drawCloud = () => {
-    cloudStatus.replaceChildren(cloudOn()
-      ? h('span', {}, `☁ Connected to ${cloudConfig().repo} · last sync ${ago(lastSync())}`)
-      : h('span.muted', {}, 'Not connected: books stay on this device only.'));
-    syncBtn.hidden = !cloudOn();
-    disconnect.hidden = !cloudOn();
+    const on = cloudOn();
+    cloudStatus.replaceChildren(on ? h('span', {}, `☁ Synced with your books repo · ${ago(lastSync())} `, syncBtn) : '');
+    connectBox.hidden = on;
+    disconnect.hidden = !on;
   };
   const doSync = async () => {
     syncBtn.disabled = true;
     try {
       const r = await syncLibrary(l => { cloudStatus.textContent = l; });
-      toast(r.down || r.up || r.gone ? `Synced: ${r.down} downloaded, ${r.up} uploaded${r.gone ? `, ${r.gone} removed` : ''}` : 'Library is up to date');
+      if (r.down || r.up || r.gone) toast(`Synced: ${r.down} downloaded, ${r.up} uploaded${r.gone ? `, ${r.gone} removed` : ''}`);
     } catch (err) { toast(err.message, 6000); }
     syncBtn.disabled = false;
     drawCloud(); drawList();
   };
   const connect = async () => {
-    const repo = parseRepo(repoIn.value);
+    const repo = repoIn.value.trim() ? parseRepo(repoIn.value) : DEFAULT_REPO;
     if (!repo) return toast('Enter the repository as owner/name');
     const next = { repo, branch: branchIn.value.trim() || 'main', token: tokenIn.value.trim() || cfg.token };
     if (!next.token) return toast('Paste the access token');
     cloudStatus.textContent = 'Checking…';
     try {
-      const desc = await testCloud(next);
+      await testCloud(next);
       setCloudConfig(next);
       tokenIn.value = '';
-      toast(`Connected: ${desc}`);
+      toast('Connected to your books');
       await doSync();
     } catch (err) { cloudStatus.replaceChildren(h('span.bad-text', {}, err.message)); }
   };
-  const disconnect = h('button.btn.small.ghost', { onclick: () => { if (confirm('Disconnect this device from the cloud library? Books already here stay.')) { setCloudConfig(null); drawCloud(); } } }, 'Disconnect');
+  const disconnect = h('button.btn.small.ghost', { onclick: () => { if (confirm('Disconnect this device from your books repo? Books already here stay.')) { setCloudConfig({ ...cloudConfig(), token: '' }); drawCloud(); } } }, 'Disconnect this device');
+  connectBox.append(
+    h('p.small', {}, h('strong', {}, 'Connect your books'), ' — paste your access token once on this device to get your books (and the AI model) from your private repo.'),
+    h('div.row.wrap.token-row', {}, tokenIn, h('button.btn.small', { onclick: connect }, 'Connect')),
+    h('details.panel-sub.small', {}, h('summary', {}, 'Where do I get a token?'),
+      h('ol', {},
+        h('li', {}, 'GitHub → Settings → Developer settings → Fine-grained tokens → Generate new token.'),
+        h('li', {}, 'Repository access: only ', h('code', {}, DEFAULT_REPO), '. Permissions: ', h('strong', {}, 'Contents: Read and write'), '.'),
+        h('li', {}, 'Copy it and paste it here. It stays on this device only.'))));
+  const advanced = h('details.panel-sub.small.advanced', {},
+    h('summary', {}, 'Advanced'),
+    h('div.form-grid', {},
+      h('label', {}, h('span.muted.small', {}, 'Books repository'), repoIn),
+      h('label', {}, h('span.muted.small', {}, 'Branch'), branchIn)),
+    h('label.stack', {}, h('span.muted.small', {}, 'New access token'), h('input.input', { type: 'password', placeholder: 'github_pat_…', autocomplete: 'off', oninput: e => { tokenIn.value = e.target.value; } })),
+    h('div.row.wrap', {}, h('button.btn.small', { onclick: connect }, 'Save & test'), disconnect));
 
-  // ---------- on-device model ----------
+  // ---------- on-device model (computers only) ----------
   const gpuNote = h('div.small', {});
   const localStatus = h('div.muted.small', {});
   const localBar = h('div.bar', { hidden: true }, h('span', { style: { width: '0%' } }));
   const modelList = h('div.model-list', {});
-  const drawModels = () => modelList.replaceChildren(...Object.entries(LOCAL_MODELS).map(([k, m]) => h('label.model-row' + (localKey() === k ? '.on' : ''), {},
-    h('input', { type: 'radio', name: 'localmodel', checked: localKey() === k || null, onchange: () => { setLocalKey(k); drawModels(); } }),
-    h('div.grow', {}, h('div.ref-name', {}, m.name, k === defaultLocalKey() ? h('span.cite', {}, ' suggested here') : null),
-      h('div.muted.small', {}, `${(m.size / 1000).toFixed(1)} GB download, once · ${m.note}${localReady(k) ? ' · loaded' : ''}`),
-      isPhone() && m.size > 2000 ? h('div.small.bad-text', {}, 'Too big for a phone browser: it will likely run out of memory.') : null))));
-  hasWebGPU().then(ok => gpuNote.replaceChildren(ok ? h('span', {}, '✓ WebGPU available') : h('span.bad-text', {}, 'No WebGPU in this browser: on-device chat needs Chrome/Edge on a computer or Safari on iOS 26+.')));
+  const drawModels = async () => {
+    const stored = Object.fromEntries(await Promise.all(Object.keys(LOCAL_MODELS).map(async k => [k, await modelStored(k)])));
+    modelList.replaceChildren(...Object.entries(LOCAL_MODELS).map(([k, m]) => h('label.model-row' + (localKey() === k ? '.on' : ''), {},
+      h('input', { type: 'radio', name: 'localmodel', checked: localKey() === k || null, onchange: () => { setLocalKey(k); drawModels(); } }),
+      h('div.grow', {}, h('div.ref-name', {}, m.name, k === defaultLocalKey() ? h('span.cite', {}, ' default') : null),
+        h('div.muted.small', {}, `${stored[k] ? '✓ stored on this device' : `${(m.size / 1000).toFixed(1)} GB download, once`}${m.mirror && cloudOn() ? ' · from your books repo' : ''} · ${m.note}${localReady(k) ? ' · loaded' : ''}`)))));
+  };
+  hasWebGPU().then(ok => gpuNote.replaceChildren(ok ? h('span', {}, '✓ WebGPU available') : h('span.bad-text', {}, 'No WebGPU in this browser: the AI tutor needs Chrome/Edge on a computer or Safari on iOS 26+.')));
   const preload = h('button.btn.small', {
     onclick: async () => {
       preload.disabled = true; localBar.hidden = false;
@@ -113,49 +129,25 @@ export function render(root) {
     },
   }, 'Download & load now');
 
-  // ---------- Claude ----------
-  const keyIn = h('input.input', { type: 'password', placeholder: tutorKey() ? '•••••••• (saved)' : 'sk-ant-…', autocomplete: 'off' });
-  const keyStatus = h('div.small', {});
-  const drawKey = () => keyStatus.replaceChildren(tutorKey() ? h('span', {}, `✓ Key saved on this device · model ${TUTOR_MODEL}`) : h('span.muted', {}, 'No key: the chat uses Book mode only.'));
-
+  const phone = isPhone();
   root.append(
-    h('header.view-head', {}, h('a.icon-btn', { href: '#/chat', 'aria-label': 'Back' }, '‹'), h('h1.grow', {}, 'Library & AI')),
+    h('header.view-head', {}, h('a.icon-btn', { href: '#/chat', 'aria-label': 'Back' }, '‹'), h('h1.grow', {}, phone ? 'Your books' : 'Library & AI')),
     h('div.lib-grid', {},
       h('section.panel', {},
-        h('div.panel-head', {}, h('h2', {}, '📚 Your books'), h('span.muted.small', {}, 'chat, cues and background all search these')),
-        h('p.hint', {}, 'PDFs with real text: study guides, official cert guides, cheat sheets. The text is read on the device and split into passages with page numbers. Scanned image-only PDFs need OCR first.'),
-        h('div.row.wrap', {}, h('button.btn', { onclick: () => file.click() }, '+ Add PDFs'),
-          h('label.check-row.small', {}, backupPdf, h('span', {}, 'Also back up the PDF file to the cloud'))),
-        file, status, bar, listEl),
-      h('section.panel', {},
-        h('div.panel-head', {}, h('h2', {}, '☁ Cloud library'), h('span.muted.small', {}, 'same books on every device')),
-        h('p.hint', {}, 'Your books sync through a private GitHub repository that only you can see. The app itself is public, so the books never go into it.'),
-        h('details.panel-sub', {},
-          h('summary', {}, 'One-time setup (5 minutes)'),
-          h('ol.small', {},
-            h('li', {}, 'On GitHub, create a new repository, set it to ', h('strong', {}, 'Private'), ', and tick "Add a README".'),
-            h('li', {}, 'Settings → Developer settings → Fine-grained tokens → Generate. Repository access: only that repository. Permissions: ', h('strong', {}, 'Contents: Read and write'), '. Set an expiry you are happy with.'),
-            h('li', {}, 'Paste the repository name and token below on each device (phone and computer).'))),
-        h('div.form-grid', {},
-          h('label', {}, h('span.muted.small', {}, 'Private repository'), repoIn),
-          h('label', {}, h('span.muted.small', {}, 'Branch'), branchIn)),
-        h('label.stack', {}, h('span.muted.small', {}, 'Fine-grained access token (stays on this device)'), tokenIn),
-        h('div.row.wrap', {}, h('button.btn.small', { onclick: connect }, cfg.repo ? 'Save & test' : 'Connect'), syncBtn, disconnect),
-        cloudStatus),
-      h('section.panel', {},
-        h('div.panel-head', {}, h('h2', {}, '🧠 On-device model'), h('span.muted.small', {}, 'free · private · offline after download')),
-        h('p.hint', {}, 'Open-weight models from Google that run inside the browser on your GPU, used by Chat\'s On-device mode. Answers are grounded in passages from your books. Small models still make mistakes: check anything surprising against the passages shown under each answer.'),
+        h('div.panel-head', {}, phone ? h('span') : h('h2', {}, '📚 Your books'), cloudStatus),
+        connectBox,
+        listEl,
+        h('div.row.wrap', {}, h('button.btn.small', { onclick: () => file.click() }, '+ Add a PDF'),
+          h('label.check-row.small', {}, backupPdf, h('span', {}, 'Also keep the PDF file'))),
+        h('p.muted.small', {}, 'PDFs with real text (scanned, image-only PDFs need OCR first). Chat, cues and backgrounds search these.'),
+        file, status, bar,
+        phone ? null : advanced),
+      phone ? null : h('section.panel', {},
+        h('div.panel-head', {}, h('h2', {}, '🧠 AI tutor model'), h('span.muted.small', {}, 'free · private · offline once stored')),
+        h('p.hint', {}, 'Open-weight models that run inside the browser on your GPU, for the chat\'s AI tutor and AI cues. Phones always use Granite. Small models still make mistakes: check anything surprising against the passages under each answer.'),
         gpuNote, modelList,
-        h('div.row.wrap', {}, preload), localStatus, localBar),
-      h('section.panel', {},
-        h('div.panel-head', {}, h('h2', {}, '✨ Claude tutor'), h('span.muted.small', {}, 'optional')),
-        h('p.hint', {}, `For in-depth explanations in Chat. Uses your own Anthropic API key (console.anthropic.com → API keys) and is billed to that account, usually a few cents per question. Each question is sent with the matching passages from your books. Without a key, Chat's free Book mode quotes your books directly.`),
-        h('label.stack', {}, h('span.muted.small', {}, 'Anthropic API key (stays on this device, not in backups)'), keyIn),
-        h('div.row.wrap', {},
-          h('button.btn.small', { onclick: () => { const k = keyIn.value.trim(); if (!/^sk-ant-/.test(k)) return toast('That doesn\'t look like an Anthropic key (sk-ant-…)'); setTutorKey(k); keyIn.value = ''; drawKey(); toast('Key saved'); } }, 'Save key'),
-          h('button.btn.small.ghost', { onclick: () => { setTutorKey(''); drawKey(); } }, 'Remove')),
-        keyStatus)));
+        h('div.row.wrap', {}, preload), localStatus, localBar)));
 
-  drawList(); drawCloud(); drawKey(); drawModels();
+  drawList(); drawCloud(); drawModels();
   if (cloudOn() && Date.now() - lastSync() > 10 * 60000) doSync();
 }

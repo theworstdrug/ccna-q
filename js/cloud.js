@@ -13,9 +13,13 @@ import { listDocs, saveDoc, deleteDoc } from './refs.js';
 
 const CFG = 'ccnaq.cloud';
 const PART = 700; // chunks per part file
+export const DEFAULT_REPO = 'theworstdrug/ccna-books';
 
+/** { repo, branch, token } – repo and branch default to your private books repo. */
 export function cloudConfig() {
-  try { return JSON.parse(localStorage.getItem(CFG) || 'null'); } catch { return null; }
+  let c = null;
+  try { c = JSON.parse(localStorage.getItem(CFG) || 'null'); } catch { /* blocked */ }
+  return { repo: c?.repo || DEFAULT_REPO, branch: c?.branch || 'main', token: c?.token || '' };
 }
 export function setCloudConfig(cfg) {
   try { if (cfg) localStorage.setItem(CFG, JSON.stringify(cfg)); else localStorage.removeItem(CFG); } catch { /* storage blocked */ }
@@ -52,12 +56,16 @@ async function gh(path, { method = 'GET', body, raw = false, cfg = cloudConfig()
     if (res.status === 403) msg = `Access denied: give the token "Contents: Read and write" on ${cfg.repo}. (${msg})`;
     throw new CloudError(msg, res.status);
   }
+  if (raw === 'response') return res;
   if (raw === 'blob') return res.blob();
   if (raw) return res.text();
   return res.status === 204 ? null : res.json();
 }
 
 const branch = (cfg = cloudConfig()) => cfg?.branch || 'main';
+
+/** A file from the books repo as a streaming Response (works for files up to 100 MB). */
+export const ghRaw = path => gh(`/contents/${path.split('/').map(encodeURIComponent).join('/')}?ref=${encodeURIComponent(branch())}`, { raw: 'response' });
 
 /** Check the connection; returns a short description of the repo. */
 export async function testCloud(cfg) {

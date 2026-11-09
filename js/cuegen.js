@@ -1,19 +1,13 @@
 // Cue suggestions: leading questions for the Cornell cue column. QUESTIONS ONLY, never answers.
 //
 //  • ruleCues(): instant, offline, built-in templates driven by the glossary terms in the text
-//  • modelCues(): a small open model running on the device (transformers.js, WebGPU or WASM).
-//    Free, no account or key. Downloaded once from Hugging Face, then cached for offline use.
+//  • modelCues(): the on-device model shared with the chat (js/localllm.js). Free, no account or key.
 //
 // Whatever produces them, cleanQuestions() keeps only text up to the first "?".
 
 import { GLOSSARY } from './data/glossary.js';
 import { termsIn } from './terms.js';
 
-export const TRANSFORMERS_URL = 'https://cdn.jsdelivr.net/npm/@huggingface/transformers@4.3.1';
-
-// One model: SmolLM2-360M-Instruct. (Qwen2.5-0.5B was dropped: at the quantisations a phone can run it
-// answered its own questions and drifted off topic.)
-export const MODEL = { id: 'HuggingFaceTB/SmolLM2-360M-Instruct', name: 'SmolLM2 360M', size: { webgpu: 273, wasm: 365 }, dtype: { webgpu: 'q4f16', wasm: 'int8' } };
 
 // ---------------------------------------------------------------- cleaning
 
@@ -130,37 +124,7 @@ export function onTopic(qs, context) {
 }
 
 // ---------------------------------------------------------------- on-device model
-
-let gen = null;
-
-export const modelReady = () => !!gen;
-
-async function pickDevice() {
-  try {
-    if (navigator.gpu && await navigator.gpu.requestAdapter()) return 'webgpu';
-  } catch { /* fall through */ }
-  return 'wasm';
-}
-
-/** Load (downloading on first use) the model. onProgress(0..1, label). */
-export async function loadModel(onProgress = () => {}) {
-  if (gen) return gen;
-  const device = await pickDevice();
-  onProgress(0, 'Loading the AI runtime…');
-  const tf = await import(TRANSFORMERS_URL);
-  const files = {};
-  gen = await tf.pipeline('text-generation', MODEL.id, {
-    device, dtype: MODEL.dtype[device],
-    progress_callback: p => {
-      if (p.status === 'progress' && p.total) {
-        files[p.file] = [p.loaded, p.total];
-        const [l, t] = Object.values(files).reduce((a, [x, y]) => [a[0] + x, a[1] + y], [0, 0]);
-        onProgress(l / t, `Downloading ${MODEL.name} · ${Math.round(l / 1e6)} / ${Math.round(t / 1e6)} MB`);
-      } else if (p.status === 'ready') onProgress(1, 'Model ready');
-    },
-  });
-  return gen;
-}
+// The same on-device model as the chat (js/localllm.js), so a device only ever downloads one.
 
 /** The chat prompt. Instructions go after the text: small models follow them better there. */
 export function cuePrompt(text, { max = 6, background = '' } = {}) {
@@ -173,8 +137,7 @@ export function cuePrompt(text, { max = 6, background = '' } = {}) {
 
 /** Leading questions for a passage, from the on-device model, optionally grounded in reference excerpts. */
 export async function modelCues(text, { max = 6, background = '', onProgress } = {}) {
-  const g = await loadModel(onProgress);
-  onProgress?.(1, 'Thinking…');
-  const out = await g(cuePrompt(text, { max, background }), { max_new_tokens: 220, do_sample: false, repetition_penalty: 1.1 });
-  return onTopic(cleanQuestions(out[0].generated_text.at(-1).content, max + 2), `${text}\n${background}`).slice(0, max);
+  const { localGenerate } = await import('./localllm.js');
+  const out = await localGenerate({ messages: cuePrompt(text, { max, background }), maxNewTokens: 220, onProgress });
+  return onTopic(cleanQuestions(out, max + 2), `${text}\n${background}`).slice(0, max);
 }
