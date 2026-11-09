@@ -11,6 +11,7 @@ const fmtKB = n => (n > 1e6 ? `${(n / 1e6).toFixed(1)} MB` : `${Math.round(n / 1
 const ago = t => { if (!t) return 'never'; const m = Math.round((Date.now() - t) / 60000); return m < 1 ? 'just now' : m < 60 ? `${m} min ago` : `${Math.round(m / 60)} h ago`; };
 
 export function render(root) {
+  const phone = isPhone();
   // ---------- books ----------
   const status = h('div.muted.small', {});
   const bar = h('div.bar', { hidden: true }, h('span', { style: { width: '0%' } }));
@@ -65,6 +66,7 @@ export function render(root) {
   const syncBtn = h('button.btn.small.ghost', { onclick: () => doSync() }, '↻ Sync');
   const drawCloud = () => {
     const on = cloudOn();
+    if (phone) { phoneVault.hidden = !on; phoneVault.replaceChildren(vaultStatus, h('div.row.wrap', {}, rememberBtn)); }
     cloudStatus.replaceChildren(on ? h('span', {}, `☁ Synced with your books repo · ${ago(lastSync())} `, syncBtn) : '');
     connectBox.hidden = on;
     disconnect.hidden = !on;
@@ -90,7 +92,7 @@ export function render(root) {
       tokenIn.value = '';
       toast('Connected to your books');
       await doSync();
-      if (!phone && !vaultInfo) rememberSheet();
+      if (!vaultInfo) rememberSheet(); // set up the other devices right away, phone or computer
     } catch (err) { cloudStatus.replaceChildren(h('span.bad-text', {}, err.message)); }
   };
   const disconnect = h('button.btn.small.ghost', { onclick: () => { if (confirm('Disconnect this device from your books repo? Books already here stay.')) { setCloudConfig({ ...cloudConfig(), token: '' }); drawCloud(); } } }, 'Disconnect this device');
@@ -151,6 +153,8 @@ export function render(root) {
       save), { title: 'Remember on my other devices' });
     meter();
   };
+  // phones: no Advanced section, just the passphrase vault (shown once connected)
+  const phoneVault = h('div.phone-vault', {});
   const rememberBtn = h('button.btn.small', { onclick: () => (cloudOn() ? rememberSheet() : toast('Connect with a token first')) }, 'Remember on my other devices');
   const advanced = h('details.panel-sub.small.advanced', {},
     h('summary', {}, 'Advanced'),
@@ -185,7 +189,6 @@ export function render(root) {
     },
   }, 'Download & load now');
 
-  const phone = isPhone();
   root.append(
     h('header.view-head', {}, h('a.icon-btn', { href: '#/chat', 'aria-label': 'Back' }, '‹'), h('h1.grow', {}, phone ? 'Your books' : 'Library & AI')),
     h('div.lib-grid', {},
@@ -197,7 +200,7 @@ export function render(root) {
           h('label.check-row.small', {}, backupPdf, h('span', {}, 'Also keep the PDF file'))),
         h('p.muted.small', {}, 'PDFs with real text (scanned, image-only PDFs need OCR first). Chat, cues and backgrounds search these.'),
         file, status, bar,
-        phone ? null : advanced),
+        phone ? phoneVault : advanced),
       phone ? null : h('section.panel', {},
         h('div.panel-head', {}, h('h2', {}, '🧠 AI tutor model'), h('span.muted.small', {}, 'free · private · offline once stored')),
         h('p.hint', {}, 'Open-weight models that run inside the browser on your GPU, for the chat\'s AI tutor and AI cues. Phones always use Granite. Small models still make mistakes: check anything surprising against the passages under each answer.'),
