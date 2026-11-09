@@ -1025,3 +1025,30 @@ input[type="checkbox"]:checked { animation: fx-pop .35s var(--bounce); }
   *, *::before, *::after { animation-duration: .01ms !important; animation-iteration-count: 1 !important; transition-duration: .01ms !important; }
   ::view-transition-group(*), ::view-transition-old(*), ::view-transition-new(*) { animation: none !important; }
 }
+
+/* ======================================================================
+   v5 · Cue lab, reference PDFs, cue bank
+   ====================================================================== */
+.check-row { display: flex; align-items: center; gap: 8px; min-height: 36px; cursor: pointer; }
+.check-row input { width: 20px; height: 20px; accent-color: var(--accent); flex: none; }
+.sug-saved { border-top: 1px solid var(--line); padding-top: 8px; }
+.sug-saved summary { cursor: pointer; font-weight: 600; font-size: .9rem; min-height: 36px; display: flex; align-items: center; }
+.sug-row .icon-btn.tiny { flex: none; }
+.form-grid { display: grid; grid-template-columns: 1fr; gap: 10px; margin-bottom: 4px; }
+.form-grid label { display: flex; flex-direction: column; gap: 4px; min-width: 0; }
+.form-grid select { width: 100%; min-height: 44px; }
+.cue-gen .sug-panel { margin-top: 4px; }
+.cue-gen > .btn { margin-top: 10px; }
+.ref-list { display: flex; flex-direction: column; margin-top: 8px; }
+.ref-row { display: flex; align-items: center; gap: 10px; padding: 10px 0; border-bottom: 1px solid var(--line); }
+.ref-row:last-child { border-bottom: 0; }
+.ref-ico { flex: none; width: 38px; height: 46px; border-radius: 8px; display: grid; place-items: center; font-size: .66rem; font-weight: 800; letter-spacing: .04em; color: #fff; background: linear-gradient(160deg, #ff5e57, #d92c3b); box-shadow: 0 2px 8px rgba(217, 44, 59, .3); }
+.ref-name { font-weight: 600; overflow-wrap: anywhere; }
+.cue-bank .row select { flex: 1 1 200px; min-height: 40px; }
+.cue-link { margin: 4px 0 14px; align-self: flex-start; }
+@media (min-width: 640px) { .form-grid { grid-template-columns: 1fr 1fr; } }
+@media (min-width: 1024px) {
+  .cue-lab { display: grid; grid-template-columns: minmax(0, 1.25fr) minmax(0, 1fr); gap: 18px; align-items: start; }
+  .cue-lab > .cue-gen { grid-row: span 2; }
+  .cue-lab > section { margin: 0; }
+}

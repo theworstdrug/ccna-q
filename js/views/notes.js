@@ -7,7 +7,7 @@ import { chapterByN } from '../data/book.js';
 import { hash } from '../sync.js';
 import { lessonById } from '../data/lessons.js';
 import { swipe, buzz } from '../gestures.js';
-import { ruleCues, modelCues, sections, prose, MODELS, defaultModelKey, modelReady } from '../cuegen.js';
+import { cuePanel, topicSources } from './cuepanel.js';
 
 const blank = () => ({ cues: [], notes: '', summary: '' });
 
@@ -16,86 +16,6 @@ function autosize(el) {
   el.addEventListener('input', fit);
   requestAnimationFrame(fit);
   return el;
-}
-
-// ---------- cue suggestions (questions only — you write the answers) ----------
-
-function suggestPanel(c, get, addCue) {
-  const ai = () => db().settings.cueAI || {};
-  let engine = ai().on ? 'ai' : 'quick';
-  let modelKey = ai().key || defaultModelKey();
-  let round = 0;
-  // sources: each lesson section, then your own notes
-  const texts = [
-    ...c.lessons.flatMap(id => { const l = lessonById(id); return l ? sections(l.body).map(t => ({ label: l.title, text: t })) : []; }),
-  ];
-  const own = () => prose(get().notes || '');
-
-  const seg = h('div.seg.small-seg', {});
-  const status = h('div.muted.small', {});
-  const bar = h('div.bar', { hidden: true }, h('span', { style: { width: '0%' } }));
-  const list = h('div.sug-list', {});
-  const from = h('div.muted.small', {});
-  const more = h('button.btn.small.ghost', { onclick: () => run() }, '↻ More');
-  const modelSel = h('select.input.model-sel', {
-    'aria-label': 'Model', onchange: e => { modelKey = e.target.value; update(s => { s.settings.cueAI = { ...ai(), key: modelKey }; }); },
-  }, Object.entries(MODELS).map(([k, m]) => h('option', { value: k, selected: k === modelKey }, `${m.name} (~${m.size.webgpu}–${m.size.wasm} MB, once)`)));
-  const aiInfo = h('div.ai-info', {},
-    h('p.muted.small', {}, 'A small open model runs on this device: free, no account, nothing sent anywhere. The first use downloads it from Hugging Face, then it works offline.'),
-    h('p.muted.small', {}, 'Small models sometimes phrase things oddly or assume something wrong. Keep the questions that make you think, and edit the rest after adding them.'),
-    modelSel);
-
-  const drawSeg = () => {
-    seg.replaceChildren(...[['quick', 'Quick (built-in)'], ['ai', 'AI model']].map(([k, l]) => h('button' + (engine === k ? '.on' : ''), {
-      onclick: () => { engine = k; update(s => { s.settings.cueAI = { ...ai(), on: k === 'ai', key: modelKey }; }); drawSeg(); },
-    }, l)));
-    aiInfo.hidden = engine !== 'ai';
-  };
-
-  const show = (qs, label) => {
-    const have = new Set(get().cues.map(x => x.q.trim().toLowerCase()));
-    from.textContent = label ? `From: ${label}` : '';
-    list.replaceChildren(...(qs.length ? qs.map(q => {
-      const added = have.has(q.toLowerCase());
-      const btn = h('button.btn.small' + (added ? '.ghost' : ''), {
-        disabled: added || null,
-        onclick: () => { addCue(q); buzz(6); btn.textContent = 'Added ✓'; btn.disabled = true; btn.classList.add('ghost'); },
-      }, added ? 'Added ✓' : '+ Add');
-      return h('div.sug-row', {}, h('div.grow.sug-q', {}, q), btn);
-    }) : [h('p.muted.small', {}, 'No suggestions for this part. Tap More.')]));
-  };
-
-  async function run() {
-    panel.dataset.started = '1';
-    const pool = [...texts, ...(own().length > 60 ? [{ label: 'your notes', text: own() }] : [])];
-    if (!pool.length) { show([], ''); return; }
-    const src = pool[round % pool.length];
-    const seed = Math.floor(round / pool.length);
-    round++;
-    if (engine === 'quick') { show(ruleCues(src.text, 6, seed), `${src.label} (built-in)`); status.textContent = ''; return; }
-    more.disabled = true;
-    list.replaceChildren(h('p.muted.small', {}, modelReady(modelKey) ? 'Thinking…' : 'Getting the model ready…'));
-    try {
-      const qs = await modelCues(src.text, {
-        key: modelKey, max: 6,
-        onProgress: (p, label) => { status.textContent = label; bar.hidden = p >= 1; bar.firstChild.style.width = `${Math.round(p * 100)}%`; },
-      });
-      status.textContent = `${MODELS[modelKey].name} · on this device`;
-      show(qs.length ? qs : ruleCues(src.text, 6, seed), src.label);
-    } catch (e) {
-      status.textContent = `The AI model couldn't run here (${e.message || e}). Showing built-in suggestions instead.`;
-      bar.hidden = true;
-      show(ruleCues(src.text, 6, seed), `${src.label} (built-in)`);
-    } finally { more.disabled = false; }
-  }
-
-  const panel = h('div.sug-panel', { hidden: true },
-    h('div.panel-head', {}, h('strong', {}, '✨ Suggested cues'), h('span.muted.small', {}, 'questions only: you write the answers')),
-    seg, aiInfo, status, bar, from, list,
-    h('div.row', {}, more));
-  panel.run = run;
-  drawSeg();
-  return panel;
 }
 
 export function render(root, [n]) {
@@ -130,7 +50,8 @@ export function render(root, [n]) {
     drawCues();
     const addCue = () => { save(x => x.cues.push({ q: '', a: '' })); drawCues(); list.lastChild?.querySelector('textarea')?.focus(); };
     const lessonCues = c.lessons.flatMap(id => lessonById(id)?.cues || []);
-    const suggest = suggestPanel(c, get, q => { save(x => x.cues.push({ q, a: '' })); drawCues(); });
+    const suggest = cuePanel({ topic: String(key), sources: () => topicSources(String(key)), onAdded: () => drawCues() });
+    suggest.hidden = true;
     const importCues = () => {
       const have = new Set(get().cues.map(x => x.q.trim()));
       const add = lessonCues.filter(([q]) => !have.has(q));

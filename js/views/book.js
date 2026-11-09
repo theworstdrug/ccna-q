@@ -56,6 +56,7 @@ function renderList(root) {
     h('header.view-head', {}, h('h1', {}, 'Book'),
       h('div.head-actions', {},
         h('a.btn.ghost.small', { href: '#/notebook' }, '📓 Notebook'),
+        h('a.btn.ghost.small', { href: '#/cues' }, '✨ Cue lab'),
         h('a.btn.ghost.small', { href: '#/read/_glossary' }, 'Glossary'))),
     h('section.panel.book-hero', {},
       h('div.muted.small', {}, BOOK_TITLE),

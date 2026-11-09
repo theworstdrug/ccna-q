@@ -18,6 +18,7 @@ const defaults = () => ({
   drills: {},       // drillId -> { n, ok, streak, best }
   nb: {},           // lessonId -> paper notebook page (topics beyond the book)
   anki: {},         // export sources/options, custom cards, last export hashes
+  cueBank: [],      // every suggested cue ever generated { q, topic, src, engine, at, used, hidden }
   settings: { examDate: '2027-01-29', cutoff: '2027-02-02', fontScale: 1 },
 });
 
@@ -47,10 +48,21 @@ let saveTimer = null;
 export function save() {
   clearTimeout(saveTimer);
   saveTimer = setTimeout(() => {
+    saveTimer = null;
     try { localStorage.setItem(KEY, JSON.stringify(state)); } catch (e) { console.warn('save failed', e); }
   }, 150);
   subs.forEach(f => f(state));
 }
+
+// write immediately when the app is backgrounded or closed (iOS may kill it without warning)
+function flush() {
+  if (!saveTimer) return;
+  clearTimeout(saveTimer);
+  saveTimer = null;
+  try { localStorage.setItem(KEY, JSON.stringify(state)); } catch (e) { console.warn('save failed', e); }
+}
+globalThis.addEventListener?.('pagehide', flush);
+globalThis.document?.addEventListener('visibilitychange', () => { if (document.visibilityState === 'hidden') flush(); });
 
 export const db = () => state;
 export function update(fn) { fn(state); save(); }

@@ -11,11 +11,9 @@ import { termsIn } from './terms.js';
 
 export const TRANSFORMERS_URL = 'https://cdn.jsdelivr.net/npm/@huggingface/transformers@4.3.1';
 
-export const MODELS = {
-  better: { id: 'onnx-community/Qwen2.5-0.5B-Instruct', name: 'Better · Qwen2.5 0.5B', size: { webgpu: 483, wasm: 512 }, dtype: { webgpu: 'q4f16', wasm: 'int8' } },
-  compact: { id: 'HuggingFaceTB/SmolLM2-360M-Instruct', name: 'Compact · SmolLM2 360M', size: { webgpu: 273, wasm: 365 }, dtype: { webgpu: 'q4f16', wasm: 'int8' } },
-};
-export const defaultModelKey = () => (globalThis.matchMedia?.('(pointer: coarse)').matches ? 'compact' : 'better');
+// One model: SmolLM2-360M-Instruct. (Qwen2.5-0.5B was dropped: at the quantisations a phone can run it
+// answered its own questions and drifted off topic.)
+export const MODEL = { id: 'HuggingFaceTB/SmolLM2-360M-Instruct', name: 'SmolLM2 360M', size: { webgpu: 273, wasm: 365 }, dtype: { webgpu: 'q4f16', wasm: 'int8' } };
 
 // ---------------------------------------------------------------- cleaning
 
@@ -27,7 +25,7 @@ export function cleanQuestions(raw, max = 8) {
     // every "?" ends a question; whatever follows the last one (an answer, a remark) is dropped
     const parts = rawLine.split('?');
     for (let k = 0; k < parts.length - 1; k++) {
-      let q = parts[k].replace(/^\s*(?:[-*•]|\d+[.)]|Q\d*[:.)]|Question\s*\d*[:.)])\s*/i, '').replace(/^["“'(]+/, '').trim();
+      let q = parts[k].replace(/\*\*|__/g, '').replace(/^\s*(?:[-*•]|\d+[.)]|Q\d*[:.)]|Question\s*\d*[:.)])\s*/i, '').replace(/^["“'(]+/, '').trim();
       if (!q) continue;
       q = `${q}?`;
       if (/^(here are|sure|okay|answer)/i.test(q)) continue;
@@ -98,12 +96,33 @@ export function ruleCues(text, max = 6, seed = 0) {
   return cleanQuestions([...out.slice(shift), ...out.slice(0, shift)].join('\n'), max);
 }
 
+// ---------------------------------------------------------------- staying on topic
+
+const STOP = new Set('the a an and or of to in on for with is are be by as at it its this that these those from what why how when which who does do did can could would should will if then than there their they you your into about between each other more most some such only also not no use used using uses happens happen happening purpose role difference different work works way network networks networking device devices data explain mean means'.split(' '));
+export const words = s => (String(s).toLowerCase().match(/[a-z0-9][a-z0-9.\-]*[a-z0-9]|[a-z0-9]/g) || []).filter(w => w.length > 1 && !STOP.has(w));
+
+/**
+ * Drop questions that wander off the passage: no shared content word with it, or naming a
+ * protocol/term (from the glossary) that neither the passage nor the background mentions.
+ */
+export function onTopic(qs, context) {
+  const ctxWords = new Set(words(context));
+  const ctxTerms = new Set(termsIn(context));
+  return qs.filter(q => {
+    if (!words(q).some(w => ctxWords.has(w))) return false;
+    return termsIn(q).every(t => {
+      if (ctxTerms.has(t) || GENERIC.has(t)) return true;
+      const name = GLOSSARY.find(g => g.id === t)?.term;
+      return !!name && words(name).every(w => ctxWords.has(w));
+    });
+  });
+}
+
 // ---------------------------------------------------------------- on-device model
 
 let gen = null;
-let genKey = null;
 
-export const modelReady = key => gen && genKey === key;
+export const modelReady = () => !!gen;
 
 async function pickDevice() {
   try {
@@ -112,36 +131,39 @@ async function pickDevice() {
   return 'wasm';
 }
 
-/** Load (downloading on first use) the chosen model. onProgress(0..1, label). */
-export async function loadModel(key = defaultModelKey(), onProgress = () => {}) {
-  if (modelReady(key)) return gen;
-  const m = MODELS[key];
+/** Load (downloading on first use) the model. onProgress(0..1, label). */
+export async function loadModel(onProgress = () => {}) {
+  if (gen) return gen;
   const device = await pickDevice();
   onProgress(0, 'Loading the AI runtime…');
   const tf = await import(TRANSFORMERS_URL);
   const files = {};
-  gen = await tf.pipeline('text-generation', m.id, {
-    device, dtype: m.dtype[device],
+  gen = await tf.pipeline('text-generation', MODEL.id, {
+    device, dtype: MODEL.dtype[device],
     progress_callback: p => {
       if (p.status === 'progress' && p.total) {
         files[p.file] = [p.loaded, p.total];
         const [l, t] = Object.values(files).reduce((a, [x, y]) => [a[0] + x, a[1] + y], [0, 0]);
-        onProgress(l / t, `Downloading ${m.name} · ${Math.round(l / 1e6)} / ${Math.round(t / 1e6)} MB`);
+        onProgress(l / t, `Downloading ${MODEL.name} · ${Math.round(l / 1e6)} / ${Math.round(t / 1e6)} MB`);
       } else if (p.status === 'ready') onProgress(1, 'Model ready');
     },
   });
-  genKey = key;
   return gen;
 }
 
-/** Leading questions for a passage, from the on-device model. */
-export async function modelCues(text, { key = defaultModelKey(), max = 6, onProgress } = {}) {
-  const g = await loadModel(key, onProgress);
-  onProgress?.(1, 'Thinking…');
-  const messages = [
-    { role: 'system', content: 'You are a CCNA tutor who writes study questions.' },
-    { role: 'user', content: `Read the text and write ${max} different questions that test understanding of it. Ask "why", "how" and "what happens if" questions. Write only the questions, one per line. Do not answer them.\n\nText:\n${text.slice(0, 1800)}` },
+/** The chat prompt. Instructions go after the text: small models follow them better there. */
+export function cuePrompt(text, { max = 6, background = '' } = {}) {
+  const bg = background ? `Background facts:\n${background.slice(0, 600)}\n\n` : '';
+  return [
+    { role: 'system', content: 'You are a CCNA tutor. You write short study questions about networking.' },
+    { role: 'user', content: `${bg}Text:\n${text.slice(0, 1400)}\n\nWrite ${max} questions that test understanding of the Text above. Use "why", "how" and "what happens if". Only ask about things the Text talks about${background ? ' (the background is just for accuracy)' : ''}. One question per line. Do not answer them.` },
   ];
-  const out = await g(messages, { max_new_tokens: 240, do_sample: false, repetition_penalty: 1.15 });
-  return cleanQuestions(out[0].generated_text.at(-1).content, max);
+}
+
+/** Leading questions for a passage, from the on-device model, optionally grounded in reference excerpts. */
+export async function modelCues(text, { max = 6, background = '', onProgress } = {}) {
+  const g = await loadModel(onProgress);
+  onProgress?.(1, 'Thinking…');
+  const out = await g(cuePrompt(text, { max, background }), { max_new_tokens: 220, do_sample: false, repetition_penalty: 1.1 });
+  return onTopic(cleanQuestions(out[0].generated_text.at(-1).content, max + 2), `${text}\n${background}`).slice(0, max);
 }

@@ -11,6 +11,7 @@ import * as quiz from './views/quiz.js';
 import * as notes from './views/notes.js';
 import * as notebook from './views/notebook.js';
 import * as anki from './views/anki.js';
+import * as cues from './views/cues.js';
 import { db } from './store.js';
 import { isDue } from './srs.js';
 import { getTerm } from './terms.js';
@@ -30,7 +31,7 @@ const ICON = {
 const TABS = [['today', 'Today'], ['book', 'Book'], ['review', 'Review'], ['drills', 'Drills'], ['lab', 'Lab']];
 const ROUTES = {
   today: [today, 'today'], plan: [plan, 'today'],
-  book: [book, 'book'], read: [read, 'book'], quiz: [quiz, 'book'], notes: [notes, 'book'], notebook: [notebook, 'book'],
+  book: [book, 'book'], read: [read, 'book'], quiz: [quiz, 'book'], notes: [notes, 'book'], notebook: [notebook, 'book'], cues: [cues, 'book'],
   review: [review, 'review'], anki: [anki, 'review'],
   drills: [drill, 'drills'], subnet: [subnet, 'drills'],
   lab: [lab, 'lab'],

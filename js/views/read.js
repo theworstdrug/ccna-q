@@ -159,6 +159,7 @@ function renderReader(root, id) {
       }, '🗑') : null),
     statsEl, text, phraseBtn,
     cues,
+    h('a.btn.ghost.small.cue-link', { href: `#/cues/${lesson.imported ? '' : encodeURIComponent(id)}` }, '✨ Suggest cue questions'),
     h('div.reader-foot', {}, finish, next ? h('a.btn.ghost.full', { href: `#/read/${encodeURIComponent(next.id)}` }, `Next: ${next.title} ›`) : h('a.btn.ghost.full', { href: backHref }, ch ? `Back to chapter ${ch.n} ›` : 'Back to Book ›')),
   );
 
