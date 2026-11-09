@@ -14,6 +14,10 @@ It's built for the phone first, with desktop as the secondary target. Five thumb
 | **Drills** | Tap-only quick fire with an on-screen keypad, so the phone keyboard never pops up: subnetting (timed, goal under 30 s), binary/hex conversions, port numbers, OSI layers, administrative distance, CLI modes, router memory, wildcard masks. |
 | **Lab** | A stripped-back Packet Tracer (see below). |
 
+**Anki** (Review → Anki ⇄): build decks from the glossary, book quizzes, lesson cues, a facts deck (ports, AD, OSI, masks, IOS modes), your own material (terms, Cornell cues, misses, struggling terms) and custom cards. **Get deck (.apkg)** builds a real Anki package in the browser (sql.js); on iPhone, share it to AnkiMobile. **Send to Anki desktop** pushes through the AnkiConnect add-on and **Pull review stats** brings Anki's lapses back as weak terms. Cards keep stable IDs, so re-importing updates them and keeps your scheduling. Jeremy's IT Lab decks are linked (jitl.jp/ccna-files), not bundled.
+
+**Suggested cues** (Cornell notes → ✨ Suggest cues): leading questions **without answers**, for the cue column. *Quick* uses built-in templates from the glossary terms in the lesson. *AI model* runs a small open model on the device with transformers.js: Qwen2.5-0.5B or SmolLM2-360M, both Apache-2.0. It's free with no key, downloads once from Hugging Face, and then works offline. Every suggestion is cut at its "?" so answers can't slip through.
+
 Reader: every CCNA term is highlighted. **Blue** = new; **yellow** = learning (fades as you rate it 1→4); no highlight = known. Tap a term to rate it. Tap any other word, or select a phrase, to save your own term. Paste in your own text with **Import**. Text size is adjustable (A−/A+).
 
 Wrong answers on quizzes and Cornell self-tests are logged to **Weak topics** automatically.
