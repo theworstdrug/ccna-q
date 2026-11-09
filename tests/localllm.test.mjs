@@ -12,7 +12,7 @@ test('long conversations keep the newest complete exchanges within the budget', 
   const chars = kept.reduce((a, m) => a + m.content.length, 0);
   assert.ok(chars / 4 + 1000 + 450 <= 3000 + 200, 'fits the budget');
   assert.deepEqual(fitHistory(hist, 'e'.repeat(20000), 3000), [], 'no room → no history');
-  for (const m of Object.values(LOCAL_MODELS)) assert.ok(m.id.startsWith('onnx-community/') && m.size > 0 && m.ctx >= 2000);
+  for (const m of Object.values(LOCAL_MODELS)) assert.ok((m.id.startsWith('onnx-community/') || (m.mirrorOnly && m.mirror)) && m.size > 0 && m.ctx >= 2000, m.id);
 });
 
 test('mirror fetch serves split model files from the books repo, else falls back', async () => {
@@ -41,4 +41,28 @@ test('mirror fetch serves split model files from the books repo, else falls back
   assert.equal(await (await f(`${pre}onnx/model_q4.onnx`)).text(), 'hf', 'files not in the mirror come from Hugging Face');
   assert.equal(await (await f('http://localhost/app.js')).text(), 'hf');
   assert.deepEqual(fallback, [`${pre}onnx/model_q4.onnx`, 'http://localhost/app.js']);
+});
+
+test('mirror-only models never fall back to Hugging Face', async () => {
+  const { mirrorFetch } = await import('../js/localllm.js');
+  const model = { id: 'ccnaq/x', mirror: 'models/x', mirrorOnly: true };
+  const f = mirrorFetch(model, { files: { 'config.json': { size: 2 } } }, async () => new Response('{}'), async () => { throw new Error('should not reach Hugging Face'); });
+  assert.equal((await f('https://huggingface.co/ccnaq/x/resolve/main/preprocessor_config.json')).status, 404);
+  assert.equal(await (await f('https://huggingface.co/ccnaq/x/resolve/main/config.json')).text(), '{}');
+});
+
+test('mirror streams big files to disk while delivering them, then serves them from the cache', async () => {
+  const { mirrorFetch } = await import('../js/localllm.js');
+  const store = new Map();
+  const cache = { match: async u => store.get(u)?.clone(), put: async (u, r) => { const b = new Uint8Array(await r.arrayBuffer()); store.set(u, new Response(b, { headers: r.headers })); } };
+  let fetched = 0;
+  const raw = async p => { fetched++; return new Response(new Uint8Array(p.endsWith('0') ? [1, 2] : [3])); };
+  const model = { id: 'ccnaq/x', mirror: 'm', mirrorOnly: true };
+  const f = mirrorFetch(model, { files: { 'onnx/w': { size: 3, parts: ['w.part0', 'w.part1'] } } }, raw, null, cache);
+  const url = 'https://huggingface.co/ccnaq/x/resolve/main/onnx/w';
+  assert.deepEqual([...new Uint8Array(await (await f(url)).arrayBuffer())], [1, 2, 3]);
+  await new Promise(r => setTimeout(r, 20)); // let the disk branch finish
+  assert.equal(fetched, 2);
+  assert.deepEqual([...new Uint8Array(await (await f(url)).arrayBuffer())], [1, 2, 3], 'second time from the cache');
+  assert.equal(fetched, 2, 'no new download');
 });

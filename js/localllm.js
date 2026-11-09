@@ -19,6 +19,13 @@ export const LOCAL_MODELS = {
     mirror: 'models/granite-4.0-1b',
     note: 'IBM, Apache-2.0. Most accurate in our CCNA test (5/5 with Lammle passages). Phones and computers.',
   },
+  granitelite: {
+    // same weights and identical answers; rebuilt so loading needs ~0.8 GB less memory (no second
+    // copy of the 411 MB embedding for the output layer, shorter rotary tables). Only in the books repo.
+    id: 'ccnaq/granite-4.0-1b-lite', name: 'Granite 4.0 1B', size: 1220, ctx: 3000,
+    mirror: 'models/granite-4.0-1b-lite', mirrorOnly: true,
+    note: 'Phone build of Granite 1B: identical answers, lower memory while loading. Needs your books repo connected.',
+  },
   gemma4: {
     id: 'onnx-community/gemma-4-E2B-it-ONNX', name: 'Gemma 4 E2B', size: 3110, ctx: 6000,
     note: 'Google, Apache-2.0. Faster on a good GPU and writes tighter answers, but scored 4/5 (it followed a misleading passage). Computers with ~4 GB of graphics memory. Downloads from Hugging Face.',
@@ -28,8 +35,8 @@ export const LOCAL_MODELS = {
 const KEY = 'ccnaq.localModel';
 /** Phone-sized layout: the AI settings are hidden and the small model is always used. */
 export const isPhone = () => !!globalThis.matchMedia?.('(max-width: 820px) and (pointer: coarse)').matches;
-/** Phones use Granite 1B too (it may be too big for some iPhones' memory; the crash guard catches that). */
-export const PHONE_KEY = 'granite'; // no smaller model passed the CCNA accuracy test (350M–700M all invented facts)
+/** Phones use the low-memory build of Granite 1B (the crash guard still catches a device that runs out). */
+export const PHONE_KEY = 'granitelite'; // smaller models (350M–700M) all invented facts; this is Granite 1B rebuilt to load with less memory
 export const defaultLocalKey = () => (isPhone() ? PHONE_KEY : 'granite');
 export const localKey = () => {
   if (isPhone()) return PHONE_KEY;
@@ -62,28 +69,53 @@ export async function modelStored(key) {
  * A fetch that serves a mirrored model's files from the private repo. Requests for anything
  * not in the mirror's manifest, or any failure, fall through to the normal fetch (Hugging Face).
  */
-export function mirrorFetch(model, manifest, raw, base = globalThis.fetch.bind(globalThis)) {
+export function mirrorFetch(model, manifest, raw, base = globalThis.fetch.bind(globalThis), cache = null, onBytes = null) {
   const prefix = `https://huggingface.co/${model.id}/resolve/main/`;
   return async (url, init = {}) => {
     const u = String(url);
     const path = u.startsWith(prefix) ? decodeURIComponent(u.slice(prefix.length).split('?')[0]) : null;
     const f = path && manifest.files[path];
+    if (!f && path && model.mirrorOnly) return new Response('Not found', { status: 404 }); // not on Hugging Face either
     if (!f) return base(url, init);
     const headers = new Headers(init.headers || {});
     // size probe (transformers.js asks for byte 0 and reads the total from content-range)
     if (/^bytes=0-0$/.test(headers.get('Range') || '')) {
       return new Response(new Uint8Array(1), { status: 206, headers: { 'content-range': `bytes 0-0/${f.size}`, 'content-length': '1', 'content-type': 'application/octet-stream' } });
     }
+    const hdrs = { 'content-length': String(f.size), 'content-type': 'application/octet-stream' };
+    // already on this device?
+    if (cache) {
+      const hit = await cache.match(u).catch(() => null);
+      if (hit && +(hit.headers.get('content-length') || 0) === f.size) return hit;
+    }
+    // Download straight to disk first, then hand back the stored copy. Saving before the model is
+    // built matters on phones: building it is what runs out of memory, and a download that was
+    // still being saved at that moment would be lost and start over on the next launch.
+    const deliver = async body => {
+      let seen = 0;
+      const counted = onBytes ? body.pipeThrough(new TransformStream({ transform(chunk, ctrl) { seen += chunk.byteLength; onBytes(path, seen, f.size); ctrl.enqueue(chunk); } })) : body;
+      if (!cache) return new Response(counted, { status: 200, headers: hdrs });
+      try {
+        await cache.put(u, new Response(counted, { status: 200, headers: hdrs }));
+        const stored = await cache.match(u);
+        if (stored) return stored;
+      } catch (e) { console.warn('could not store', path, e); }
+      // storage refused it (full?): fetch again and pass it straight through
+      return new Response(f.parts ? partsStream() : (await raw(`${model.mirror}/${path}`)).body, { status: 200, headers: hdrs });
+    };
     try {
-      if (!f.parts) {
-        const res = await raw(`${model.mirror}/${path}`);
-        return new Response(res.body, { status: 200, headers: { 'content-length': String(f.size), 'content-type': 'application/octet-stream' } });
-      }
-      // stream the parts back together as one file
+      if (!f.parts) return await deliver((await raw(`${model.mirror}/${path}`)).body);
+      return await deliver(partsStream());
+    } catch (e) {
+      console.warn('mirror failed, using Hugging Face', e);
+      return model.mirrorOnly ? new Response('Mirror unavailable', { status: 503 }) : base(url, init);
+    }
+    // the parts streamed back together as one file
+    function partsStream() {
       const dir = path.includes('/') ? path.slice(0, path.lastIndexOf('/') + 1) : '';
       let k = 0;
       let reader = null;
-      const body = new ReadableStream({
+      return new ReadableStream({
         async pull(ctrl) {
           for (;;) {
             if (!reader) {
@@ -98,20 +130,22 @@ export function mirrorFetch(model, manifest, raw, base = globalThis.fetch.bind(g
         },
         cancel() { reader?.cancel(); },
       });
-      return new Response(body, { status: 200, headers: { 'content-length': String(f.size), 'content-type': 'application/octet-stream' } });
-    } catch (e) {
-      console.warn('mirror failed, using Hugging Face', e);
-      return base(url, init);
     }
   };
 }
 
+let mirrorBytes = null; // (path, seen, total) while a mirrored file downloads to disk
 async function useMirror(tf, m) {
   tf.env.fetch = globalThis.fetch.bind(globalThis);
+  tf.env.useBrowserCache = true;
   if (!m.mirror || !cloudOn()) return false;
   try {
     const manifest = JSON.parse(await (await ghRaw(`${m.mirror}/manifest.json`)).text());
-    tf.env.fetch = mirrorFetch(m, manifest, ghRaw);
+    // the mirror does its own caching (streamed to disk); transformers.js would otherwise store
+    // each file by copying the whole buffer into a new Response, a second copy of the 1.2 GB weights
+    const cache = await caches.open('transformers-cache').catch(() => null);
+    tf.env.useBrowserCache = !cache;
+    tf.env.fetch = mirrorFetch(m, manifest, ghRaw, globalThis.fetch.bind(globalThis), cache, (...a) => mirrorBytes?.(...a));
     return true;
   } catch { return false; } // mirror not there: Hugging Face it is
 }
@@ -158,6 +192,7 @@ export function loadLocal(key = localKey(), onProgress = () => {}, { retry = fal
     tf.env.backends.onnx.wasm.wasmPaths = VENDOR;
     tf.env.allowLocalModels = false;
     const fromRepo = await useMirror(tf, m);
+    if (m.mirrorOnly && !fromRepo) throw new Error(`${m.name} for phones comes from your books repo: connect your books first (Chat → ⚙).`);
     // transformers.js can lose a failed download in a detached promise and hang; watch fetches
     // ourselves and fail the load with a clear message instead
     let fetchError = null;
@@ -165,7 +200,8 @@ export function loadLocal(key = localKey(), onProgress = () => {}, { retry = fal
     tf.env.fetch = async (url, init) => {
       try {
         const res = await inner(url, init);
-        if (!res.ok && res.status !== 206 && String(url).includes('/resolve/main/')) fetchError = new Error(`Download failed (${res.status}) for ${String(url).split('/').pop()}`);
+        // 404s are normal (optional files); access and server errors are not
+        if ((res.status === 401 || res.status === 403 || res.status >= 500) && String(url).includes('/resolve/main/')) fetchError = new Error(`Download failed (${res.status}) for ${String(url).split('/').pop()}`);
         return res;
       } catch (e) { fetchError = new Error(`Download failed: ${e.message || e}. Check your connection and try again.`); throw e; }
     };
@@ -178,12 +214,18 @@ export function loadLocal(key = localKey(), onProgress = () => {}, { retry = fal
       } catch (e) { if (e.storage) throw e; }
     }
     const files = {};
+    const dl = {};
+    mirrorBytes = (path, seen, total) => {
+      dl[path] = [seen, total];
+      const [l, t] = Object.values(dl).reduce((a, [u, v]) => [a[0] + u, a[1] + v], [0, 0]);
+      if (l < t) onProgress(Math.min(0.95, l / t), `Downloading ${m.name} from your books repo · ${Math.round(l / 1e6)} / ${Math.round(t / 1e6)} MB (once, saved as it arrives)`);
+    };
     let prepared = false;
     const progress_callback = x => {
       if (x.status === 'progress' && x.total) {
         files[x.file] = [x.loaded, x.total];
         const [l, t] = Object.values(files).reduce((a, [u, v]) => [a[0] + u, a[1] + v], [0, 0]);
-        if (l < t) onProgress(Math.min(0.99, l / t), stored ? `Loading ${m.name} from this device… ${Math.round((l / t) * 100)}%` : `Downloading ${m.name}${fromRepo ? ' from your books repo' : ''} · ${Math.round(l / 1e6)} / ${Math.round(t / 1e6)} MB (once)`);
+        if (l < t) onProgress(Math.min(0.99, l / t), stored || fromRepo ? `Loading ${m.name} from this device… ${Math.round((l / t) * 100)}%` : `Downloading ${m.name} · ${Math.round(l / 1e6)} / ${Math.round(t / 1e6)} MB (once)`);
       }
       // every file is in: from here the device builds the model on its GPU (the memory-hungry part)
       if (!prepared && Object.keys(files).some(f => f.endsWith('.onnx_data')) && Object.values(files).every(([l, t]) => l >= t)) {
@@ -202,14 +244,18 @@ export function loadLocal(key = localKey(), onProgress = () => {}, { retry = fal
       // AutoModelForCausalLM loads only the text parts (no vision/audio encoders);
       // q4f16 needs the GPU's half-precision support, otherwise q4 (bigger, from Hugging Face)
       model = await Promise.race([tf.AutoModelForCausalLM.from_pretrained(m.id, { device: 'webgpu', dtype: gpu.f16 ? 'q4f16' : 'q4', progress_callback }), failed]);
-    } finally { clearInterval(iv); tf.env.fetch = inner; }
+    } finally { clearInterval(iv); tf.env.fetch = inner; mirrorBytes = null; }
     setGuard(null);
     onProgress(1, `${m.name} ready`);
     if (!(await modelStored(key))) console.warn(`${m.name} loaded but was not stored; it will download again next time`);
     if (loaded?.model) await loaded.model.dispose?.();
     loaded = { key, tok, model, tf };
     return loaded;
-  })().catch(e => { if (!e.crashed) setGuard(null); throw e; }).finally(() => { loading = null; });
+  })().catch(e => {
+    if (!e.crashed) setGuard(null);
+    if (!(e instanceof Error) || !e.message) e = new Error(`The model couldn't start on this device (${String(e?.message ?? e ?? 'unknown error')}).`);
+    throw e;
+  }).finally(() => { loading = null; });
   loading = { key, p };
   return p;
 }
