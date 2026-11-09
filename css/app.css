@@ -1128,3 +1128,8 @@ label.stack { display: flex; flex-direction: column; gap: 4px; margin: 10px 0; }
 .vault-sheet p { margin: 0; }
 .passphrase { font: 600 1.25rem/1.4 ui-monospace, SFMono-Regular, Menlo, monospace; padding: 14px; border-radius: 14px; text-align: center; letter-spacing: .02em; background: color-mix(in srgb, var(--accent) 9%, var(--surface)); border: 1px solid color-mix(in srgb, var(--accent) 30%, var(--line)); user-select: all; word-spacing: .2em; }
 .phone-vault { margin-top: 12px; padding-top: 10px; border-top: 1px solid var(--line); display: flex; flex-direction: column; gap: 8px; }
+.reminders { display: flex; flex-direction: column; gap: 10px; }
+.reminders p { margin: 0; }
+.rem-row { display: flex; align-items: center; gap: 10px; justify-content: space-between; }
+.rem-row .check-row { flex: 1; }
+.rem-hour { width: auto; min-height: 40px; flex: none; }

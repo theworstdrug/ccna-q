@@ -113,6 +113,14 @@ async function commit(message, files, remove = []) {
   return c.sha;
 }
 
+/** Write small files to the books repo in one commit ({ path: string | Blob }); paths in `remove` are deleted. */
+export const writeFiles = (message, files, remove = []) => commit(message, files, remove);
+
+/** A JSON file from the books repo, or null if it doesn't exist. */
+export async function readJson(path) {
+  try { return JSON.parse(await (await ghRaw(path)).text()); } catch (e) { if (e.status === 404) return null; throw e; }
+}
+
 const meta = d => ({ id: d.id, name: d.name, pages: d.pages, size: d.size, added: d.added });
 
 /** Split a doc into part files. */

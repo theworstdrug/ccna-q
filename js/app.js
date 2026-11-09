@@ -20,6 +20,7 @@ import { getTerm } from './terms.js';
 import { outboxCount } from './sync.js';
 import { EXAM, daysUntil } from './data/plan.js';
 import { pageTransition, stagger } from './motion.js';
+import './push.js'; // keeps the reminder status fresh when reminders are on
 
 const ICON = {
   today: 'M3 12l9-8 9 8M5 10v10h5v-6h4v6h5V10',

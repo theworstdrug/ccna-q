@@ -11,6 +11,7 @@ import { CHAPTERS, BOOK_DEADLINE, readable } from '../data/book.js';
 import { bookProgress, chStatus } from './book.js';
 import { buildOutbox } from '../sync.js';
 import { countUp } from '../motion.js';
+import { openReminders } from './reminders.js';
 
 let counted = false; // tick the countdowns up once per app launch
 
@@ -28,6 +29,7 @@ export function render(root) {
   // ---------- header + countdown ----------
   root.append(
     h('header.view-head', {}, h('div.grow', {}, h('div.muted.small', {}, now.toLocaleDateString(undefined, { weekday: 'long', month: 'long', day: 'numeric' })), h('h1', {}, 'Hey sin 👋')),
+      h('button.icon-btn', { 'aria-label': 'Reminders', title: 'Reminders', onclick: () => openReminders() }, '🔔'),
       h('a.btn.ghost.small', { href: '#/plan' }, '📅 Plan')),
     h('section.countdown', {},
       h('div.cd', {}, h('div.cd-n', {}, Math.max(0, dExam)), h('div.cd-l', {}, 'days to exam', h('br'), h('span.muted', {}, fmtDate(parseDate(EXAM.target))))),
