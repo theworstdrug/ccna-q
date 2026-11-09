@@ -5,6 +5,7 @@ import { db, update } from '../store.js';
 import { DRILLS, checkAnswer } from '../drills.js';
 import { keypad } from '../keypad.js';
 import { buzz, swipe } from '../gestures.js';
+import { shake, pop, bump } from '../motion.js';
 
 export function render(root, [id]) {
   if (id && DRILLS[id] && DRILLS[id].gen) return session(root, id);
@@ -74,14 +75,24 @@ function session(root, id) {
       h('div.verdict' + (ok ? '.ok' : '.bad'), {}, ok ? '✓ Correct' : `✗ Answer: ${item.a}`),
       item.why ? h('ul.why', {}, [].concat(item.why).map(l => h('li', {}, l))) : null);
     if (item.choices) area.querySelectorAll('.choice').forEach(b => { b.disabled = true; if (b.textContent === item.a) b.classList.add('right'); else if (b.textContent === val) b.classList.add('wrong'); });
-    if (kp) kp.display.classList.add(ok ? 'ok' : 'bad');
+    if (kp) { kp.display.classList.add(ok ? 'ok' : 'bad'); (ok ? pop : shake)(kp.display); }
+    if (item.choices) {
+      const bs = [...area.querySelectorAll('.choice')];
+      pop(bs.find(b => b.textContent === item.a));
+      if (!ok) shake(bs.find(b => b.textContent === val));
+    }
+    if (ok) bump(streakEl);
     nextBtn.hidden = false;
     const cur = item;
     if (ok) setTimeout(() => { if (answered && document.body.contains(card) && item === cur) next(); }, 900);
   };
 
+  const recent = [];
   const next = () => {
-    item = d.gen();
+    // don't repeat a question until ~20 others have gone by
+    for (let tries = 0; tries < 25; tries++) { item = d.gen(); if (!recent.includes(item.q)) break; }
+    recent.push(item.q);
+    if (recent.length > 20) recent.shift();
     answered = false;
     qEl.textContent = item.q;
     fb.replaceChildren();

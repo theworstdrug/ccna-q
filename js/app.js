@@ -16,6 +16,7 @@ import { isDue } from './srs.js';
 import { getTerm } from './terms.js';
 import { outboxCount } from './sync.js';
 import { EXAM, daysUntil } from './data/plan.js';
+import { pageTransition, stagger } from './motion.js';
 
 const ICON = {
   today: 'M3 12l9-8 9 8M5 10v10h5v-6h4v6h5V10',
@@ -38,6 +39,8 @@ const ROUTES = {
 const main = document.getElementById('main');
 const nav = document.getElementById('nav');
 let cleanup = null;
+let lastActive = null;
+let lastRoute = null; // { name, depth, tab, rest }
 
 const dueCount = () => Object.entries(db().terms).filter(([id, c]) => isDue(c) && getTerm(id)).length;
 
@@ -52,12 +55,13 @@ function renderNav(active) {
   nav.replaceChildren(brand, ...TABS.map(([id, label], k) => {
     const due = id === 'review' ? dueCount() : 0;
     const nb = id === 'book' ? outboxCount() : 0;
-    return h('a.tab' + (id === active ? '.active' : ''), { href: `#/${id}`, 'aria-label': label, title: `${label} (Alt+${k + 1})`, 'aria-current': id === active ? 'page' : null },
+    return h('a.tab' + (id === active ? '.active' : '') + (id === active && lastActive !== active ? '.just' : ''), { href: `#/${id}`, 'aria-label': label, title: `${label} (Alt+${k + 1})`, 'aria-current': id === active ? 'page' : null },
       h('span.tab-ico', { html: `<svg viewBox="0 0 24 24" width="24" height="24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><path d="${ICON[id]}"/></svg>` }),
       due ? h('span.badge', {}, due > 99 ? '99+' : due) : null,
       nb ? h('span.badge.soft', { title: 'Items to write in your notebook' }, nb > 99 ? '99+' : nb) : null,
       h('span.tab-label', {}, label));
   }), foot);
+  lastActive = active;
 }
 
 // Desktop: Alt/⌥ + 1–5 switches tabs (ignored while typing).
@@ -67,17 +71,44 @@ document.addEventListener('keydown', e => {
   if (k >= 1 && k <= TABS.length) { e.preventDefault(); location.hash = `#/${TABS[k - 1][0]}`; }
 });
 
+// How "deep" a screen is: tab roots 0, detail screens 1, things opened from a detail 2.
+function depthOf(name, rest) {
+  if (TABS.some(([t]) => t === name) && !rest.length) return 0;
+  if (['quiz', 'notes', 'read'].includes(name) && rest[0] !== '_glossary') return 2;
+  return 1;
+}
+
+function directionTo(next) {
+  const prev = lastRoute;
+  if (!prev) return 'none';
+  if (next.depth > prev.depth) return 'forward';
+  if (next.depth < prev.depth) return 'back';
+  if (next.tab !== prev.tab) return 'fade';
+  // same level, same tab: e.g. chapter → chapter (swipe) — compare numbers if there are any
+  const a = parseFloat(prev.rest[0]);
+  const b = parseFloat(next.rest[0]);
+  if (Number.isFinite(a) && Number.isFinite(b) && a !== b) return b > a ? 'forward' : 'back';
+  return 'fade';
+}
+
 function route() {
   const [, name = 'today', ...rest] = (location.hash || '#/today').split('/');
+  const known = !!ROUTES[name];
   const [mod, tab] = ROUTES[name] || ROUTES.today;
-  closeSheet();
-  cleanup?.();
-  cleanup = null;
-  document.body.dataset.view = ROUTES[name] ? name : 'today';
-  main.replaceChildren();
-  window.scrollTo(0, 0);
-  cleanup = mod.render(main, rest.map(decodeURIComponent)) || null;
-  renderNav(tab);
+  const next = { name: known ? name : 'today', depth: depthOf(name, rest), tab, rest };
+  const dir = directionTo(next);
+  closeSheet(true);
+  pageTransition(dir, () => {
+    cleanup?.();
+    cleanup = null;
+    document.body.dataset.view = next.name;
+    main.replaceChildren();
+    window.scrollTo(0, 0);
+    cleanup = mod.render(main, rest.map(decodeURIComponent)) || null;
+    renderNav(tab);
+    stagger(main);
+  });
+  lastRoute = next;
 }
 
 window.addEventListener('hashchange', route);

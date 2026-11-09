@@ -42,13 +42,14 @@ test('lesson ids are unique and bodies non-empty', () => {
 test('drill generators produce answerable items', () => {
   for (const [id, d] of Object.entries(DRILLS)) {
     if (!d.gen) continue;
-    for (let i = 0; i < 300; i++) {
+    for (let i = 0; i < 1500; i++) {
       const it = d.gen();
       assert.ok(it.q && it.a !== undefined, id);
       if (it.choices) {
         assert.ok(it.choices.includes(it.a), `${id}: answer missing from choices: ${it.q}`);
         assert.equal(new Set(it.choices).size, it.choices.length, `${id}: duplicate choices: ${it.q} ${it.choices}`);
-        assert.ok(it.choices.length >= 3, `${id}: too few choices: ${it.q}`);
+        const yesNo = it.choices.length === 2 && it.choices.includes('Yes') && it.choices.includes('No');
+        assert.ok(yesNo || it.choices.length >= 3, `${id}: too few choices: ${it.q}`);
       }
       assert.ok(checkAnswer(it, it.a), `${id}: own answer rejected: ${it.q} -> ${it.a}`);
     }

@@ -14,6 +14,9 @@ export const QTYPES = {
   fit: 'Prefix for N hosts',
   count: 'Subnets in a block',
   same: 'Same subnet?',
+  next: 'Next subnet',
+  valid: 'Usable host?',
+  hostbits: 'Host bits',
 };
 
 const ORD = ['1st', '2nd', '3rd', '4th'];
@@ -87,6 +90,18 @@ export function makeQuestion(types, pMin = 16, pMax = 30) {
       const really = network(other, mask) === net;
       return { type, q: `Are ${intToIp(ip)} and ${intToIp(other)} in the same subnet with /${p}?`, a: really ? 'yes' : 'no', kind: 'yn', why: [...explain(ip, p).slice(0, 4), `${intToIp(other)} → network ${intToIp(network(other, mask))}`] };
     }
+    case 'next': {
+      const size = 2 ** (32 - p);
+      const nx = (net + size) >>> 0;
+      return { type, q: `Network address of the NEXT subnet after ${intToIp(net)}/${p}?`, a: intToIp(nx), kind: 'ip', why: [...explain(ip, p).slice(0, 2), `Next block starts ${size} addresses later: ${intToIp(nx)}`] };
+    }
+    case 'valid': {
+      const pick3 = Math.floor(Math.random() * 3);
+      const cand = pick3 === 0 ? net : pick3 === 1 ? bc : (net + 1 + Math.floor(Math.random() * Math.max(1, bc - net - 1))) >>> 0;
+      const ok = p >= 31 ? true : cand !== net && cand !== bc;
+      return { type, q: `Is ${intToIp(cand)} a usable host address in a /${p}?`, a: ok ? 'yes' : 'no', kind: 'yn', why: [...explain(cand, p).slice(-2), cand === net ? 'It is the network address.' : cand === bc ? 'It is the broadcast address.' : 'It sits between them.'] };
+    }
+    case 'hostbits': return { type, q: `How many host bits does a /${p} leave?`, a: String(32 - p), kind: 'num', why: [`32 − ${p} = ${32 - p} host bits → ${2 ** (32 - p)} addresses`] };
     default: return makeQuestion(['net'], pMin, pMax);
   }
 }

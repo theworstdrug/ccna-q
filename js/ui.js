@@ -78,7 +78,7 @@ export function md(text) {
 let sheetEl = null;
 /** Bottom sheet (modal on desktop). Returns a close function. */
 export function sheet(content, { onClose, tall = false, title } = {}) {
-  closeSheet();
+  closeSheet(true);
   const close = () => { closeSheet(); onClose?.(); };
   const panel = h('div.sheet' + (tall ? '.tall' : ''), { role: 'dialog', 'aria-modal': 'true' },
     h('div.sheet-head', {},
@@ -96,11 +96,19 @@ export function sheet(content, { onClose, tall = false, title } = {}) {
   return close;
 }
 
-export function closeSheet() {
+/** Close the sheet with a slide-down (or instantly, e.g. when the page changes). */
+export function closeSheet(instant = false) {
   if (!sheetEl) return;
-  sheetEl._off?.();
-  sheetEl.remove();
+  const el = sheetEl;
   sheetEl = null;
+  el._off?.();
+  const reduce = globalThis.matchMedia?.('(prefers-reduced-motion: reduce)').matches;
+  if (instant || reduce) { el.remove(); return; }
+  el.classList.remove('open');
+  el.classList.add('closing');
+  const panel = el.querySelector('.sheet');
+  if (panel) panel.style.transform = '';
+  setTimeout(() => el.remove(), 320);
 }
 
 export function toast(msg, ms = 2200) {

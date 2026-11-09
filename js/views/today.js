@@ -10,6 +10,9 @@ import { getTerm } from '../terms.js';
 import { CHAPTERS, BOOK_DEADLINE, readable } from '../data/book.js';
 import { bookProgress, chStatus } from './book.js';
 import { buildOutbox } from '../sync.js';
+import { countUp } from '../motion.js';
+
+let counted = false; // tick the countdowns up once per app launch
 
 export function render(root) {
   const s = db();
@@ -104,6 +107,8 @@ export function render(root) {
     root.append(h('section.panel', {}, h('h2', {}, 'Coming up'),
       h('ul.plain', {}, upcoming.map(m => h('li' + (m.big ? '.big' : ''), {}, h('strong', {}, fmtDate(parseDate(m.date))), ` · ${m.text} `, h('span.muted.small', {}, `(${daysUntil(m.date, now)}d)`))))));
   }
+
+  if (!counted) { counted = true; root.querySelectorAll('.cd-n').forEach(el => countUp(el, el.textContent)); }
 }
 
 function notebookTodo() {

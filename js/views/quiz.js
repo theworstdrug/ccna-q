@@ -6,6 +6,7 @@ import { CHAPTERS, chapterByN, readable } from '../data/book.js';
 import { buzz, swipe } from '../gestures.js';
 import { chStatus } from './book.js';
 import { hash } from '../sync.js';
+import { shake, pop } from '../motion.js';
 
 const shuffle = a => { const x = [...a]; for (let i = x.length - 1; i > 0; i--) { const j = Math.floor(Math.random() * (i + 1)); [x[i], x[j]] = [x[j], x[i]]; } return x; };
 
@@ -61,7 +62,8 @@ function start(root, pool, exam, c) {
         answers.push({ item, pick: ch, ok });
         buzz(ok ? 8 : 30);
         btns.forEach(b => { b.disabled = true; if (b.textContent === item.a) b.classList.add('right'); });
-        if (!ok) e.currentTarget.classList.add('wrong');
+        if (!ok) { e.currentTarget.classList.add('wrong'); shake(e.currentTarget); }
+        pop(btns.find(b => b.textContent === item.a));
         why.replaceChildren(h('strong', {}, ok ? '✓ Correct. ' : '✗ Not quite. '), item.why || '');
         why.hidden = false;
         nextBtn.hidden = false;

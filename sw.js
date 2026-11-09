@@ -5,7 +5,7 @@ const CACHE = `ccnaq-${VERSION}`;
 const FILES = [
   './', './index.html', './manifest.webmanifest', './css/app.css',
   './icons/icon.svg', './icons/icon-192.png', './icons/icon-512.png', './icons/apple-touch-icon.png',
-  './js/app.js', './js/store.js', './js/srs.js', './js/ui.js', './js/terms.js', './js/subnetq.js',
+  './js/app.js', './js/store.js', './js/srs.js', './js/ui.js', './js/motion.js', './js/terms.js', './js/subnetq.js',
   './js/drills.js', './js/keypad.js', './js/gestures.js', './js/sync.js', './js/pdf.js', './js/spread.js', './js/cuegen.js',
   './js/anki/zip.js', './js/anki/apkg.js', './js/anki/sources.js', './js/anki/connect.js',
   './js/vendor/sql-wasm.js', './js/vendor/sql-wasm.wasm',

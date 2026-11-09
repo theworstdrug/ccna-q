@@ -6,13 +6,17 @@ import { makeQuestion, check, QTYPES } from '../subnetq.js';
 import { todayKey } from '../ui.js';
 import { keypad } from '../keypad.js';
 import { buzz, swipe } from '../gestures.js';
+import { shake, pop, bump } from '../motion.js';
 
 const TARGET = 30000;
-const DEFAULT_TYPES = ['net', 'bcast', 'first', 'last', 'hosts', 'mask', 'wild', 'fit', 'same'];
+const DEFAULT_TYPES = ['net', 'bcast', 'first', 'last', 'hosts', 'mask', 'wild', 'fit', 'same', 'next', 'valid', 'prefix', 'count', 'hostbits'];
 
 export function render(root) {
   const st = db().subnet;
   if (!st.types) st.types = DEFAULT_TYPES;
+  // v2 added more question types: switch them on for people who kept the old defaults
+  if (!st.typesV2) { st.types = [...new Set([...st.types, 'next', 'valid', 'prefix', 'count', 'hostbits'])]; st.typesV2 = true; }
+  const recent = []; // no-repeat memory for this session
   let q = null;
   let t0 = 0;
   let timer = null;
@@ -59,7 +63,14 @@ export function render(root) {
   }
 
   function next() {
-    q = makeQuestion(st.types.length ? st.types : DEFAULT_TYPES, st.prefixMin, st.prefixMax);
+    for (let tries = 0; tries < 20; tries++) {
+      q = makeQuestion(st.types.length ? st.types : DEFAULT_TYPES, st.prefixMin, st.prefixMax);
+      // avoid the same question or the same type three times running
+      const sameType = recent.slice(-2).every(r => r.type === q.type) && recent.length >= 2 && st.types.length > 2;
+      if (!recent.some(r => r.q === q.q) && !sameType) break;
+    }
+    recent.push({ q: q.q, type: q.type });
+    if (recent.length > 25) recent.shift();
     answered = false;
     qEl.textContent = q.q;
     kp.set('');
@@ -101,9 +112,11 @@ export function render(root) {
     feedback.replaceChildren(
       h('div.verdict' + (ok ? '.ok' : '.bad'), {}, ok ? `✓ Correct · ${(ms / 1000).toFixed(1)}s${ms > TARGET ? ' (over 30s)' : ''}` : `✗ Answer: ${q.a}`),
       h('ul.why', {}, q.why.map(l => h('li', {}, l))));
+    (ok ? pop : shake)(feedback.firstChild);
     submitBtn.hidden = false;
     ynRow.hidden = true;
     drawStreak();
+    if (ok) bump(streakEl);
     drawStats();
     const cur = q;
     if (ok) setTimeout(() => { if (answered && q === cur && document.body.contains(qEl)) next(); }, 1100);

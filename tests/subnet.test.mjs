@@ -29,3 +29,17 @@ test('answer normalisation', () => {
   assert.ok(check({ kind: 'yn', a: 'yes' }, 'Y'));
   assert.ok(check({ kind: 'ip', a: '10.0.0.0' }, ' 10.0.0.0 '));
 });
+
+test('new subnet types: next subnet, usable host, host bits', () => {
+  for (let i = 0; i < 400; i++) {
+    for (const t of ['next', 'valid', 'hostbits']) {
+      const q = makeQuestion([t], 16, 30);
+      assert.ok(check(q, q.a), `${t}: ${q.q} -> ${q.a}`);
+    }
+  }
+  // spot-check maths
+  const n = makeQuestion(['next'], 26, 26);
+  const [ip] = n.q.match(/\d+\.\d+\.\d+\.\d+/);
+  const last = Number(ip.split('.')[3]);
+  assert.equal(Number(n.a.split('.')[3]), (last + 64) % 256);
+});
