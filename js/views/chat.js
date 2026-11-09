@@ -9,7 +9,7 @@ import { fullIndex, search, keyPoints, listDocs } from '../refs.js';
 import { words, ruleCues } from '../cuegen.js';
 import { bankAdd } from '../cuebank.js';
 import { currentTopic, topicTitle } from '../sync.js';
-import { askLocal, localKey, localReady, LOCAL_MODELS, isPhone, modelStored } from '../localllm.js';
+import { askLocal, localKey, localReady, LOCAL_MODELS, isPhone, modelStored, clearCrash, diagnostics, crashedBefore } from '../localllm.js';
 import { cloudOn, pdfUrl, syncLibrary } from '../cloud.js';
 import { buzz } from '../gestures.js';
 
@@ -68,6 +68,7 @@ export function render(root) {
       ? `${isPhone() ? 'Explains in its own words' : m.name} · on this device · free · ${localReady(localKey()) ? 'ready' : stored ? 'stored on this device' : `downloads ~${(m.size / 1000).toFixed(1)} GB once`}`
       : 'Quotes your books · free · offline';
     if (!isPhone() && engine === 'local') engineNote.append(' · ', h('a', { href: '#/library' }, 'change model'));
+    if (engine === 'local' && crashedBefore(localKey())) engineNote.append(h('div.bad-text', {}, `⚠ Last time the AI ran out of memory while starting and the app closed. Close other apps, then ask again (or use Book mode).`));
   };
   const setEngine = e => {
     engine = e;
@@ -106,6 +107,8 @@ export function render(root) {
       return h('div.msg.bot', {},
         h('div.bubble.md', { html: md(m.text || '') }),
         m.error ? h('div.verdict.bad', {}, m.error) : null,
+        m.retry ? h('button.btn.small', { onclick: () => { clearCrash(); input.value = m.q; send(); } }, 'Try again') : null,
+        m.diag ? h('div.muted.small', {}, m.diag) : null,
         h('div.muted.small', {}, `${m.engine === 'local' ? `${LOCAL_MODELS[m.model]?.name || 'On-device model'} · on this device` : 'AI'} · grounded in ${m.src?.length || 0} passage${m.src?.length === 1 ? '' : 's'}`),
         sources(m.src), actions(m));
     }
@@ -191,8 +194,9 @@ export function render(root) {
       if (busy.signal.aborted) throw Object.assign(new Error('Stopped.'), { name: 'AbortError' });
       update(s => { s.chat.threads.find(x => x.id === t.id).msgs.push({ role: 'assistant', engine: 'local', model: key, q, text, src, at: Date.now() }); });
     } catch (e) {
+      const diag = await diagnostics().catch(() => '');
       const stopped = e?.name === 'AbortError' || /abort|stopped/i.test(e?.message || '');
-      update(s => { s.chat.threads.find(x => x.id === t.id).msgs.push({ role: 'assistant', engine, model: localKey(), q, text: acc, src, error: stopped ? 'Stopped.' : e.message, at: Date.now() }); });
+      update(s => { s.chat.threads.find(x => x.id === t.id).msgs.push({ role: 'assistant', engine, model: localKey(), q, text: acc, src, error: stopped ? 'Stopped.' : e.message, retry: !!e.crashed, diag: stopped ? '' : diag, at: Date.now() }); });
     } finally {
       busy = null;
       sendBtn.textContent = '↑'; sendBtn.setAttribute('aria-label', 'Send');

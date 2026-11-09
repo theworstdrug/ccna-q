@@ -19,6 +19,11 @@ export const LOCAL_MODELS = {
     mirror: 'models/granite-4.0-1b',
     note: 'IBM, Apache-2.0. Most accurate in our CCNA test (5/5 with Lammle passages). Phones and computers.',
   },
+  granite350: {
+    id: 'onnx-community/granite-4.0-350m-ONNX-web', name: 'Granite 4.0 350M', size: 350, ctx: 3000,
+    mirror: 'models/granite-4.0-350m',
+    note: 'IBM, Apache-2.0. Small enough for a phone\'s memory. Simpler answers than the 1B.',
+  },
   gemma4: {
     id: 'onnx-community/gemma-4-E2B-it-ONNX', name: 'Gemma 4 E2B', size: 3110, ctx: 6000,
     note: 'Google, Apache-2.0. Faster on a good GPU and writes tighter answers, but scored 4/5 (it followed a misleading passage). Computers with ~4 GB of graphics memory. Downloads from Hugging Face.',
@@ -28,9 +33,11 @@ export const LOCAL_MODELS = {
 const KEY = 'ccnaq.localModel';
 /** Phone-sized layout: the AI settings are hidden and the small model is always used. */
 export const isPhone = () => !!globalThis.matchMedia?.('(max-width: 820px) and (pointer: coarse)').matches;
-export const defaultLocalKey = () => 'granite';
+/** Phones get the small model: the 1B's 1.25 GB of weights is more memory than iOS allows a web app. */
+export const PHONE_KEY = 'granite'; // pending: a smaller model that is still accurate (see tests)
+export const defaultLocalKey = () => (isPhone() ? PHONE_KEY : 'granite');
 export const localKey = () => {
-  if (isPhone()) return 'granite';
+  if (isPhone()) return PHONE_KEY;
   try { const k = localStorage.getItem(KEY); return LOCAL_MODELS[k] ? k : defaultLocalKey(); } catch { return defaultLocalKey(); }
 };
 export const setLocalKey = k => { try { localStorage.setItem(KEY, k); } catch { /* blocked */ } };
@@ -116,13 +123,36 @@ async function useMirror(tf, m) {
 
 // ---------------------------------------------------------------- loading + generating
 
+// ---------------------------------------------------------------- crash guard
+// If the app is killed while the model is being prepared (out of memory on a phone), the next
+// launch would just start again and loop. Remember the stage so it can stop and explain instead.
+const GUARD = 'ccnaq.ai.loading';
+const guard = () => { try { return JSON.parse(localStorage.getItem(GUARD) || 'null'); } catch { return null; } };
+const setGuard = g => { try { if (g) localStorage.setItem(GUARD, JSON.stringify(g)); else localStorage.removeItem(GUARD); } catch { /* ignore */ } };
+/** Did the last attempt to load this model die while preparing it? */
+export const crashedBefore = key => { const g = guard(); return !!(g && g.key === key && g.stage === 'prepare' && Date.now() - g.at < 6 * 3600e3); };
+export const clearCrash = () => setGuard(null);
+
+/** One line describing this device's AI readiness, for error messages and screenshots. */
+export async function diagnostics(key = localKey()) {
+  const g = await adapter();
+  let st = '';
+  try { const e = await navigator.storage?.estimate?.(); if (e?.quota) st = `${Math.round((e.usage || 0) / 1e6)} MB used of ${Math.round(e.quota / 1e6)} MB`; } catch { /* ignore */ }
+  const persisted = await navigator.storage?.persisted?.().catch(() => null);
+  const last = guard();
+  return [`model ${LOCAL_MODELS[key]?.name}`, `WebGPU ${g.ok ? 'yes' : 'no'}`, `f16 ${g.f16 ? 'yes' : 'no'}`, `stored ${(await modelStored(key)) ? 'yes' : 'no'}`, st && `storage ${st}${persisted ? ' (persistent)' : ''}`, last && `last stage ${last.stage}`].filter(Boolean).join(' · ');
+}
+
 let loaded = null; // { key, tok, model, tf }
 let loading = null;
 export const localReady = key => loaded?.key === key;
 
 /** Load (downloading on first use) a model. onProgress(0..1, label). */
-export function loadLocal(key = localKey(), onProgress = () => {}) {
+export function loadLocal(key = localKey(), onProgress = () => {}, { retry = false } = {}) {
   if (localReady(key)) return Promise.resolve(loaded);
+  if (!retry && crashedBefore(key)) {
+    return Promise.reject(Object.assign(new Error(`Last time, ${LOCAL_MODELS[key].name} ran this device out of memory while starting, and the app was closed. Close other apps and tap Try again, or use Book mode.`), { crashed: true }));
+  }
   if (loading?.key === key) return loading.p;
   const m = LOCAL_MODELS[key];
   const p = (async () => {
@@ -145,14 +175,29 @@ export function loadLocal(key = localKey(), onProgress = () => {}) {
       } catch (e) { fetchError = new Error(`Download failed: ${e.message || e}. Check your connection and try again.`); throw e; }
     };
     const stored = await modelStored(key);
+    if (!stored) {
+      try { await navigator.storage?.persist?.(); } catch { /* ignore */ }
+      try {
+        const est = await navigator.storage?.estimate?.();
+        if (est?.quota && est.quota - (est.usage || 0) < m.size * 1.15e6) throw Object.assign(new Error(`Not enough storage for ${m.name}: it needs about ${m.size} MB free for this app. Free up space on the device and try again.`), { storage: true });
+      } catch (e) { if (e.storage) throw e; }
+    }
     const files = {};
+    let prepared = false;
     const progress_callback = x => {
       if (x.status === 'progress' && x.total) {
         files[x.file] = [x.loaded, x.total];
         const [l, t] = Object.values(files).reduce((a, [u, v]) => [a[0] + u, a[1] + v], [0, 0]);
-        onProgress(l / t, stored ? `Loading ${m.name} from this device…` : `Downloading ${m.name}${fromRepo ? ' from your books repo' : ''} · ${Math.round(l / 1e6)} / ${Math.round(t / 1e6)} MB (once)`);
+        if (l < t) onProgress(Math.min(0.99, l / t), stored ? `Loading ${m.name} from this device… ${Math.round((l / t) * 100)}%` : `Downloading ${m.name}${fromRepo ? ' from your books repo' : ''} · ${Math.round(l / 1e6)} / ${Math.round(t / 1e6)} MB (once)`);
+      }
+      // every file is in: from here the device builds the model on its GPU (the memory-hungry part)
+      if (!prepared && Object.keys(files).some(f => f.endsWith('.onnx_data')) && Object.values(files).every(([l, t]) => l >= t)) {
+        prepared = true;
+        setGuard({ key, stage: 'prepare', at: Date.now() });
+        onProgress(0.995, `Preparing ${m.name} on this device's GPU… (the first time can take a minute)`);
       }
     };
+    setGuard({ key, stage: 'download', at: Date.now() });
     let iv = 0;
     const failed = new Promise((_, reject) => { iv = setInterval(() => { if (fetchError) { clearInterval(iv); reject(fetchError); } }, 500); });
     failed.catch(() => {}); // handled through the races below
@@ -163,11 +208,13 @@ export function loadLocal(key = localKey(), onProgress = () => {}) {
       // q4f16 needs the GPU's half-precision support, otherwise q4 (bigger, from Hugging Face)
       model = await Promise.race([tf.AutoModelForCausalLM.from_pretrained(m.id, { device: 'webgpu', dtype: gpu.f16 ? 'q4f16' : 'q4', progress_callback }), failed]);
     } finally { clearInterval(iv); tf.env.fetch = inner; }
+    setGuard(null);
     onProgress(1, `${m.name} ready`);
+    if (!(await modelStored(key))) console.warn(`${m.name} loaded but was not stored; it will download again next time`);
     if (loaded?.model) await loaded.model.dispose?.();
     loaded = { key, tok, model, tf };
     return loaded;
-  })().finally(() => { loading = null; });
+  })().catch(e => { if (!e.crashed) setGuard(null); throw e; }).finally(() => { loading = null; });
   loading = { key, p };
   return p;
 }
