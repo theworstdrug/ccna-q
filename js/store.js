@@ -17,6 +17,7 @@ const defaults = () => ({
   quiz: {},         // chapter|'exam' -> { best, last, attempts, at }
   drills: {},       // drillId -> { n, ok, streak, best }
   nb: {},           // lessonId -> paper notebook page (topics beyond the book)
+  anki: {},         // export sources/options, custom cards, last export hashes
   settings: { examDate: '2027-01-29', cutoff: '2027-02-02', fontScale: 1 },
 });
 

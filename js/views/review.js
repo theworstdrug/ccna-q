@@ -24,7 +24,7 @@ export function render(root) {
   const learning = all.filter(([, c]) => c.status >= 1 && c.status <= 4).map(([id]) => id);
   const known = all.filter(([, c]) => c.status === 5).map(([id]) => id);
 
-  root.append(h('header.view-head', {}, h('h1', {}, 'Review')));
+  root.append(h('header.view-head', {}, h('h1', {}, 'Review'), h('div.head-actions', {}, h('a.btn.ghost.small', { href: '#/anki' }, 'Anki ⇄'))));
 
   if (!learning.length && !due.length) {
     root.append(h('div.empty', {},

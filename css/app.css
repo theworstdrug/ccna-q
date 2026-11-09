@@ -679,3 +679,25 @@ ol.missed li { margin: 0 0 12px; }
 .spread-pv.zoomed svg { width: 240%; max-width: none; }
 .pv-btn { font-size: 1rem; }
 .spread-sheet .chip-btn { text-transform: none; }
+
+/* anki */
+.anki-big { font-size: 1.15rem; }
+.anki-actions { display: flex; flex-direction: column; gap: 8px; margin-top: 12px; }
+.anki-actions .row .btn { flex: 1; }
+.anki-msg { margin-top: 10px; padding: 10px 12px; border-radius: 10px; background: var(--surface-2); font-size: .92rem; }
+.anki-msg.ok { background: color-mix(in srgb, var(--ok) 12%, var(--surface)); }
+.anki-msg.bad { background: color-mix(in srgb, var(--bad) 12%, var(--surface)); }
+.src-list { display: flex; flex-direction: column; background: var(--surface); border: 1px solid var(--line); border-radius: var(--radius); overflow: hidden; margin-bottom: 14px; }
+.src-row { padding: 10px 12px; border-bottom: 1px solid var(--line); display: flex; flex-direction: column; gap: 6px; }
+.src-row:last-child { border-bottom: 0; }
+.src-row.off { opacity: .55; }
+.src-main { display: flex; gap: 12px; align-items: flex-start; cursor: pointer; }
+.src-main input { width: 22px; height: 22px; margin-top: 2px; accent-color: var(--accent); flex: none; }
+.src-title { font-weight: 600; }
+.src-count { display: inline-block; min-width: 26px; padding: 0 7px; border-radius: 9px; background: var(--surface-2); font-size: .78rem; font-weight: 600; color: var(--muted); }
+.src-opt { margin-left: 34px; width: calc(100% - 34px); min-height: 38px; padding: 6px 10px; }
+.custom-cards { font-family: var(--mono); font-size: .86rem; }
+.anki-setup ol, .jitl ol { padding-left: 1.2em; }
+.anki-setup li { margin: 6px 0; }
+.copy-row { display: flex; align-items: center; gap: 8px; margin-top: 6px; flex-wrap: wrap; }
+.copy-row code { word-break: break-all; }

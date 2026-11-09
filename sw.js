@@ -7,9 +7,11 @@ const FILES = [
   './icons/icon.svg', './icons/icon-192.png', './icons/icon-512.png', './icons/apple-touch-icon.png',
   './js/app.js', './js/store.js', './js/srs.js', './js/ui.js', './js/terms.js', './js/subnetq.js',
   './js/drills.js', './js/keypad.js', './js/gestures.js', './js/sync.js', './js/pdf.js', './js/spread.js',
+  './js/anki/zip.js', './js/anki/apkg.js', './js/anki/sources.js', './js/anki/connect.js',
+  './js/vendor/sql-wasm.js', './js/vendor/sql-wasm.wasm',
   './js/data/glossary.js', './js/data/lessons.js', './js/data/booklessons.js', './js/data/book.js', './js/data/plan.js',
   './js/views/today.js', './js/views/book.js', './js/views/read.js', './js/views/review.js', './js/views/subnet.js',
-  './js/views/drill.js', './js/views/quiz.js', './js/views/notes.js', './js/views/notebook.js', './js/views/spreadview.js', './js/views/lab.js', './js/views/plan.js',
+  './js/views/drill.js', './js/views/quiz.js', './js/views/notes.js', './js/views/notebook.js', './js/views/spreadview.js', './js/views/anki.js', './js/views/lab.js', './js/views/plan.js',
   './docs/notebook-guide.pdf',
   './js/sim/net.js', './js/sim/engine.js', './js/sim/cli.js', './js/sim/labs.js',
 ];

@@ -10,6 +10,7 @@ import * as plan from './views/plan.js';
 import * as quiz from './views/quiz.js';
 import * as notes from './views/notes.js';
 import * as notebook from './views/notebook.js';
+import * as anki from './views/anki.js';
 import { db } from './store.js';
 import { isDue } from './srs.js';
 import { getTerm } from './terms.js';
@@ -28,7 +29,7 @@ const TABS = [['today', 'Today'], ['book', 'Book'], ['review', 'Review'], ['dril
 const ROUTES = {
   today: [today, 'today'], plan: [plan, 'today'],
   book: [book, 'book'], read: [read, 'book'], quiz: [quiz, 'book'], notes: [notes, 'book'], notebook: [notebook, 'book'],
-  review: [review, 'review'],
+  review: [review, 'review'], anki: [anki, 'review'],
   drills: [drill, 'drills'], subnet: [subnet, 'drills'],
   lab: [lab, 'lab'],
 };

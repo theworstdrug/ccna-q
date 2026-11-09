@@ -57,7 +57,7 @@ export function render(root) {
       h('li', {}, h('strong', {}, 'Main course: '), 'Jeremy\'s IT Lab (YouTube; Packet Tracer labs + Anki decks)'),
       h('li', {}, h('strong', {}, 'Labs: '), 'Packet Tracer (official Linux .deb) on sinstation; the Lab tab here on the phone. Optional: GNS3 / CML Free'),
       h('li', {}, h('strong', {}, 'Practice exams: '), 'Boson ExSim (buy Jan 18, use in week 12)'),
-      h('li', {}, h('strong', {}, 'Flashcards: '), 'Anki desktop + AnkiMobile'),
+      h('li', {}, h('strong', {}, 'Flashcards: '), 'Anki desktop + AnkiMobile. ', h('a', { href: '#/anki' }, 'Export CCNA-Q decks / get JITL decks')),
       h('li', {}, h('strong', {}, 'Linux tie-ins: '), h('code', {}, 'ip addr/route/neigh, ss, dig, traceroute, tcpdump'), ', Wireshark, ', h('code', {}, 'curl | jq'), ' for REST/JSON'))));
 
   // data

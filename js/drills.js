@@ -9,29 +9,29 @@ const mc = (q, a, wrong, why) => ({ q, a, choices: shuffle([a, ...shuffle(wrong)
 const bin8 = n => n.toString(2).padStart(8, '0');
 const hex2 = n => n.toString(16).toUpperCase().padStart(2, '0');
 
-const PORTS = [
+export const PORTS = [
   ['FTP data', 'TCP 20'], ['FTP control', 'TCP 21'], ['SSH', 'TCP 22'], ['Telnet', 'TCP 23'], ['SMTP', 'TCP 25'],
   ['DNS', 'UDP/TCP 53'], ['DHCP server', 'UDP 67'], ['DHCP client', 'UDP 68'], ['TFTP', 'UDP 69'], ['HTTP', 'TCP 80'],
   ['POP3', 'TCP 110'], ['NTP', 'UDP 123'], ['IMAP', 'TCP 143'], ['SNMP', 'UDP 161'], ['SNMP traps', 'UDP 162'],
   ['BGP', 'TCP 179'], ['HTTPS', 'TCP 443'], ['Syslog', 'UDP 514'],
 ];
 
-const OSI = [
+export const OSI = [
   ['Hub', 1], ['Repeater', 1], ['Bits', 1], ['UTP cable', 1], ['Switch', 2], ['Bridge', 2], ['Frame', 2], ['MAC address', 2],
   ['Ethernet frame header', 2], ['802.1Q tag', 2], ['Router', 3], ['Packet', 3], ['IP address', 3], ['ICMP', 3], ['OSPF', 3],
   ['Segment', 4], ['TCP', 4], ['UDP', 4], ['Port number', 4], ['Windowing', 4], ['Session setup/teardown (OSI)', 5],
   ['Encryption & compression (OSI)', 6], ['JPEG/ASCII formatting', 6], ['HTTP', 7], ['DNS', 7], ['FTP', 7], ['SMTP', 7],
 ];
-const LAYER = ['', '1 · Physical', '2 · Data Link', '3 · Network', '4 · Transport', '5 · Session', '6 · Presentation', '7 · Application'];
+export const LAYER = ['', '1 · Physical', '2 · Data Link', '3 · Network', '4 · Transport', '5 · Session', '6 · Presentation', '7 · Application'];
 
-const AD = [['Connected', 0], ['Static', 1], ['eBGP', 20], ['EIGRP (internal)', 90], ['OSPF', 110], ['RIP', 120], ['EIGRP (external)', 170], ['iBGP', 200], ['Unusable / unknown', 255]];
+export const AD = [['Connected', 0], ['Static', 1], ['eBGP', 20], ['EIGRP (internal)', 90], ['OSPF', 110], ['RIP', 120], ['EIGRP (external)', 170], ['iBGP', 200], ['Unusable / unknown', 255]];
 
-const CLI_MODES = [
+export const CLI_MODES = [
   ['Router>', 'User EXEC'], ['Router#', 'Privileged EXEC'], ['Router(config)#', 'Global configuration'],
   ['Router(config-if)#', 'Interface configuration'], ['Router(config-line)#', 'Line configuration'],
   ['Router(config-router)#', 'Routing protocol configuration'], ['Router(config-subif)#', 'Subinterface configuration'],
 ];
-const CLI_WHERE = [
+export const CLI_WHERE = [
   ['hostname R1', 'Global configuration'], ['ip address 10.0.0.1 255.0.0.0', 'Interface configuration'],
   ['no shutdown', 'Interface configuration'], ['show running-config', 'Privileged EXEC'], ['copy running-config startup-config', 'Privileged EXEC'],
   ['password cisco + login', 'Line configuration'], ['enable secret class', 'Global configuration'], ['network 10.0.0.0 0.255.255.255 area 0', 'Routing protocol configuration'],
@@ -39,7 +39,7 @@ const CLI_WHERE = [
   ['banner motd #Hi#', 'Global configuration'], ['description Uplink', 'Interface configuration'], ['access-list 10 permit any', 'Global configuration'],
   ['ip access-group 10 in', 'Interface configuration'], ['access-class 5 in', 'Line configuration'],
 ];
-const MEM = [
+export const MEM = [
   ['Running configuration', 'RAM'], ['Routing table', 'RAM'], ['ARP cache', 'RAM'], ['Startup configuration', 'NVRAM'],
   ['IOS image', 'Flash'], ['POST', 'ROM'], ['Bootstrap program', 'ROM'], ['ROMmon', 'ROM'], ['Packet buffers', 'RAM'],
 ];

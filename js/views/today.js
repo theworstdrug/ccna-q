@@ -54,6 +54,7 @@ export function render(root) {
     habit('lab', 'A lab (Packet Tracer or here)', undefined),
     h('div.quick', {},
       due ? h('a.btn.small', { href: '#/review' }, `Review ${due}`) : null,
+      h('a.btn.small.ghost', { href: '#/anki' }, 'Anki decks'),
       h('a.btn.small.ghost', { href: '#/subnet' }, 'Subnet drill'),
       continueLink(s))));
 
