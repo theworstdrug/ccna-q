@@ -1,9 +1,10 @@
 // Library & AI: your reference books (synced through your private books repo) and, on computers,
 // the on-device AI model. On phones the AI settings are hidden: the small model is always used.
 
-import { h, toast } from '../ui.js';
+import { h, toast, sheet } from '../ui.js';
 import { listDocs, importPdf } from '../refs.js';
 import { cloudConfig, setCloudConfig, cloudOn, parseRepo, testCloud, syncLibrary, uploadDoc, removeDoc, lastSync, DEFAULT_REPO } from '../cloud.js';
+import { fetchVault, unlock, publishVault, removeVault, makePassphrase, strengthBits, MIN_BITS, APP_REPO } from '../vault.js';
 import { LOCAL_MODELS, localKey, setLocalKey, loadLocal, localReady, hasWebGPU, defaultLocalKey, isPhone, modelStored } from '../localllm.js';
 
 const fmtKB = n => (n > 1e6 ? `${(n / 1e6).toFixed(1)} MB` : `${Math.round(n / 1e3)} KB`);
@@ -89,19 +90,74 @@ export function render(root) {
       tokenIn.value = '';
       toast('Connected to your books');
       await doSync();
+      if (!phone && !vaultInfo) rememberSheet();
     } catch (err) { cloudStatus.replaceChildren(h('span.bad-text', {}, err.message)); }
   };
   const disconnect = h('button.btn.small.ghost', { onclick: () => { if (confirm('Disconnect this device from your books repo? Books already here stay.')) { setCloudConfig({ ...cloudConfig(), token: '' }); drawCloud(); } } }, 'Disconnect this device');
-  connectBox.append(
-    h('p.small', {}, h('strong', {}, 'Connect your books'), ' — paste your access token once on this device to get your books (and the AI model) from your private repo.'),
+  // ---------- connecting: passphrase (vault) or token ----------
+  const passIn = h('input.input', { type: 'password', placeholder: 'your five-word passphrase', autocomplete: 'current-password', autocapitalize: 'off', spellcheck: false, onkeydown: e => { if (e.key === 'Enter') doUnlock(); } });
+  const doUnlock = async () => {
+    if (!passIn.value.trim()) return;
+    cloudStatus.textContent = 'Unlocking…';
+    try { await unlock(passIn.value); passIn.value = ''; toast('Unlocked: connected to your books'); await doSync(); }
+    catch (err) { cloudStatus.replaceChildren(h('span.bad-text', {}, err.message)); }
+  };
+  const tokenHelp = h('details.panel-sub.small', {}, h('summary', {}, 'Where do I get a token?'),
+    h('ol', {},
+      h('li', {}, 'GitHub → Settings → Developer settings → Fine-grained tokens → Generate new token.'),
+      h('li', {}, 'Repository access: ', h('code', {}, DEFAULT_REPO), ' and ', h('code', {}, APP_REPO), '. Permissions: ', h('strong', {}, 'Contents: Read and write'), '. (The app repo is only needed to save the passphrase vault.)'),
+      h('li', {}, 'Paste it here once, then choose "Remember on my other devices" so the others only need a passphrase.')));
+  const drawConnect = vault => connectBox.replaceChildren(...(vault ? [
+    h('p.small', {}, h('strong', {}, 'Unlock your books'), ' — enter your passphrase once on this device.'),
+    h('div.row.wrap.token-row', {}, passIn, h('button.btn.small', { onclick: doUnlock }, 'Unlock')),
+    h('details.panel-sub.small', {}, h('summary', {}, 'Use a token instead'), h('div.row.wrap.token-row', {}, tokenIn, h('button.btn.small', { onclick: connect }, 'Connect')), tokenHelp),
+  ] : [
+    h('p.small', {}, h('strong', {}, 'Connect your books'), ' — paste your access token once to get your books (and the AI model) from your private repo.'),
     h('div.row.wrap.token-row', {}, tokenIn, h('button.btn.small', { onclick: connect }, 'Connect')),
-    h('details.panel-sub.small', {}, h('summary', {}, 'Where do I get a token?'),
-      h('ol', {},
-        h('li', {}, 'GitHub → Settings → Developer settings → Fine-grained tokens → Generate new token.'),
-        h('li', {}, 'Repository access: only ', h('code', {}, DEFAULT_REPO), '. Permissions: ', h('strong', {}, 'Contents: Read and write'), '.'),
-        h('li', {}, 'Copy it and paste it here. It stays on this device only.'))));
+    tokenHelp,
+  ]));
+  drawConnect(null);
+  fetchVault().then(v => { vaultInfo = v; drawConnect(v); drawVault(); });
+
+  // ---------- remembering the token for other devices ----------
+  let vaultInfo = null;
+  const vaultStatus = h('div.small', {});
+  const drawVault = () => { rememberBtn.textContent = vaultInfo ? 'Change passphrase' : 'Remember on my other devices'; vaultStatus.replaceChildren(vaultInfo
+    ? h('span', {}, `🔐 Other devices can unlock with your passphrase (vault saved ${vaultInfo.at}). `)
+    : h('span.muted', {}, 'Other devices need the token pasted, unless you save a passphrase vault.')); };
+  const rememberSheet = () => {
+    let pass = makePassphrase(5);
+    const shown = h('div.passphrase', {}, pass);
+    const own = h('input.input', { placeholder: 'or type your own (long!)', autocapitalize: 'off', spellcheck: false, oninput: e => { pass = e.target.value || shown.textContent; meter(); } });
+    const bits = h('div.small', {});
+    const meter = () => { const b = strengthBits(pass); bits.replaceChildren(b >= MIN_BITS ? h('span', {}, `✓ about ${b} bits: fine`) : h('span.bad-text', {}, `about ${b} bits: too easy to guess`)); save.disabled = b < MIN_BITS || !ok.checked; };
+    const ok = h('input', { type: 'checkbox', onchange: () => meter() });
+    const save = h('button.btn.full', {
+      disabled: true,
+      onclick: async () => {
+        save.disabled = true; save.textContent = 'Encrypting & saving…';
+        try { vaultInfo = await publishVault(pass); drawVault(); close(); toast('Saved: other devices can now unlock with the passphrase'); }
+        catch (err) { toast(err.message, 7000); save.textContent = 'Save vault'; meter(); }
+      },
+    }, 'Save vault');
+    const close = sheet(h('div.vault-sheet', {},
+      h('p', {}, 'Your token will be encrypted with this passphrase and saved in the app repo. On each other device you type the passphrase once instead of the token.'),
+      shown,
+      h('div.row.wrap', {}, h('button.btn.small.ghost', { onclick: () => { pass = makePassphrase(5); shown.textContent = pass; own.value = ''; meter(); } }, '↻ New words'),
+        h('button.btn.small.ghost', { onclick: () => navigator.clipboard?.writeText(pass).then(() => toast('Copied')) }, 'Copy')),
+      own, bits,
+      h('p.muted.small', {}, 'The vault is public, so its safety is the passphrase: five random words would take thousands of years to guess even with dedicated hardware. A short or familiar phrase would not. Save it in your password manager.'),
+      h('label.check-row.small', {}, ok, h('span', {}, 'I\'ve saved the passphrase somewhere safe')),
+      save), { title: 'Remember on my other devices' });
+    meter();
+  };
+  const rememberBtn = h('button.btn.small', { onclick: () => (cloudOn() ? rememberSheet() : toast('Connect with a token first')) }, 'Remember on my other devices');
   const advanced = h('details.panel-sub.small.advanced', {},
     h('summary', {}, 'Advanced'),
+    vaultStatus,
+    h('div.row.wrap', {},
+      rememberBtn,
+      h('button.btn.small.ghost', { onclick: async () => { if (!confirm('Delete the saved vault? Other devices that are already connected stay connected.')) return; try { await removeVault(); vaultInfo = null; drawVault(); toast('Vault deleted'); } catch (err) { toast(err.message, 6000); } } }, 'Delete vault')),
     h('div.form-grid', {},
       h('label', {}, h('span.muted.small', {}, 'Books repository'), repoIn),
       h('label', {}, h('span.muted.small', {}, 'Branch'), branchIn)),
