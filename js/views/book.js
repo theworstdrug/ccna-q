@@ -99,13 +99,17 @@ function renderList(root) {
       h('span.chev', {}, '›'));
     list.append(row);
   }
-  root.append(h('h2.section-title', {}, 'Chapters'), h('p.hint', {}, 'Tap the circle to cycle Not started → Reading → Done.'), list);
+  // two columns on desktop: chapters | beyond the book + imports
+  const colA = h('div.book-col', {});
+  const colB = h('div.book-col', {});
+  root.append(h('div.book-cols', {}, colA, colB));
+  colA.append(h('h2.section-title', {}, 'Chapters'), h('p.hint', {}, 'Tap the circle to cycle Not started → Reading → Done.'), list);
 
   // beyond the book
   const extra = LESSONS.filter(l => !inBook.has(l.id) && !l.chapter);
   const byDom = {};
   for (const l of extra) (byDom[l.domain] = byDom[l.domain] || []).push(l);
-  root.append(h('h2.section-title', {}, 'Beyond the book'),
+  colB.append(h('h2.section-title', {}, 'Beyond the book'),
     h('p.hint', {}, 'v1.1 topics the 2003 book doesn\'t cover. Pair them with Jeremy\'s IT Lab and Packet Tracer on the PC.'),
     h('div.beyond', {}, Object.entries(byDom).map(([d, ls]) => h('div.beyond-group', {},
       h('div.muted.small.beyond-dom', {}, DOMAIN_NAMES[d]),
@@ -113,7 +117,7 @@ function renderList(root) {
 
   // imports
   const imps = db().imports;
-  root.append(h('div.panel-head.section-title', {}, h('h2', {}, 'Your imports'), h('button.btn.small.ghost', { onclick: importSheet }, '+ Import text')),
+  colB.append(h('div.panel-head.section-title', {}, h('h2', {}, 'Your imports'), h('button.btn.small.ghost', { onclick: importSheet }, '+ Import text')),
     imps.length ? h('div.beyond', {}, imps.map(l => lessonRow({ ...l, imported: true }))) : h('p.hint', {}, 'Paste notes or a video transcript and read it with terms highlighted.'));
 }
 

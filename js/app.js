@@ -15,6 +15,7 @@ import { db } from './store.js';
 import { isDue } from './srs.js';
 import { getTerm } from './terms.js';
 import { outboxCount } from './sync.js';
+import { EXAM, daysUntil } from './data/plan.js';
 
 const ICON = {
   today: 'M3 12l9-8 9 8M5 10v10h5v-6h4v6h5V10',
@@ -41,16 +42,30 @@ let cleanup = null;
 const dueCount = () => Object.entries(db().terms).filter(([id, c]) => isDue(c) && getTerm(id)).length;
 
 function renderNav(active) {
-  nav.replaceChildren(...TABS.map(([id, label]) => {
+  const dExam = daysUntil(EXAM.target);
+  const brand = h('a.nav-brand', { href: '#/today', 'aria-label': 'CCNA-Q home' },
+    h('span.brand-mark', { html: '<svg viewBox="0 0 24 24" width="22" height="22" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round"><circle cx="12" cy="5" r="2.2"/><circle cx="5" cy="12" r="2.2"/><circle cx="19" cy="12" r="2.2"/><circle cx="12" cy="19" r="2.2"/><path d="M10.4 6.6 6.6 10.4M13.6 6.6l3.8 3.8M6.6 13.6l3.8 3.8M17.4 13.6l-3.8 3.8"/></svg>' }),
+    h('span.brand-text', {}, h('strong', {}, 'CCNA-Q'), h('small', {}, '200-301 v1.1')));
+  const foot = h('div.nav-foot', {},
+    h('a.nav-count', { href: '#/plan' }, h('strong', {}, Math.max(0, dExam)), h('span', {}, ' days to the exam')),
+    h('div.nav-keys', {}, 'Alt/⌥ + 1–5 to switch'));
+  nav.replaceChildren(brand, ...TABS.map(([id, label], k) => {
     const due = id === 'review' ? dueCount() : 0;
     const nb = id === 'book' ? outboxCount() : 0;
-    return h('a.tab' + (id === active ? '.active' : ''), { href: `#/${id}`, 'aria-label': label, 'aria-current': id === active ? 'page' : null },
+    return h('a.tab' + (id === active ? '.active' : ''), { href: `#/${id}`, 'aria-label': label, title: `${label} (Alt+${k + 1})`, 'aria-current': id === active ? 'page' : null },
       h('span.tab-ico', { html: `<svg viewBox="0 0 24 24" width="24" height="24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><path d="${ICON[id]}"/></svg>` }),
       due ? h('span.badge', {}, due > 99 ? '99+' : due) : null,
       nb ? h('span.badge.soft', { title: 'Items to write in your notebook' }, nb > 99 ? '99+' : nb) : null,
       h('span.tab-label', {}, label));
-  }));
+  }), foot);
 }
+
+// Desktop: Alt/⌥ + 1–5 switches tabs (ignored while typing).
+document.addEventListener('keydown', e => {
+  if (!e.altKey || e.ctrlKey || e.metaKey || e.target.matches?.('input, textarea, select')) return;
+  const k = Number(e.code?.replace('Digit', '') || e.key);
+  if (k >= 1 && k <= TABS.length) { e.preventDefault(); location.hash = `#/${TABS[k - 1][0]}`; }
+});
 
 function route() {
   const [, name = 'today', ...rest] = (location.hash || '#/today').split('/');
