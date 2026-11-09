@@ -6,19 +6,19 @@ import { TRANSFORMERS_URL } from './cuegen.js';
 
 // Sizes are the download for the text-only parts (q4f16 weights), in MB.
 export const LOCAL_MODELS = {
-  gemma4: {
-    id: 'onnx-community/gemma-4-E2B-it-ONNX', name: 'Gemma 4 E2B', size: 3110, ctx: 6000,
-    note: 'Best quality. Computers with a decent GPU (about 4 GB of graphics memory).',
-  },
   granite: {
     id: 'onnx-community/granite-4.0-1b-ONNX-web', name: 'Granite 4.0 1B', size: 1250, ctx: 4000,
-    note: 'Phone-sized (IBM, Apache-2.0). Scored best of the small models on CCNA questions.',
+    note: 'IBM, Apache-2.0. Most accurate in our CCNA test (5/5 with Lammle passages). Phones and computers.',
+  },
+  gemma4: {
+    id: 'onnx-community/gemma-4-E2B-it-ONNX', name: 'Gemma 4 E2B', size: 3110, ctx: 6000,
+    note: 'Google, Apache-2.0. Faster on a good GPU and writes tighter answers, but scored 4/5 (it followed a misleading passage). Computers with ~4 GB of graphics memory.',
   },
 };
 
 const KEY = 'ccnaq.localModel';
 export const isPhone = () => !!globalThis.matchMedia?.('(pointer: coarse)').matches && Math.min(screen.width, screen.height) < 820;
-export const defaultLocalKey = () => (isPhone() ? 'granite' : 'gemma4');
+export const defaultLocalKey = () => 'granite';
 export const localKey = () => { try { const k = localStorage.getItem(KEY); return LOCAL_MODELS[k] ? k : defaultLocalKey(); } catch { return defaultLocalKey(); } };
 export const setLocalKey = k => { try { localStorage.setItem(KEY, k); } catch { /* blocked */ } };
 
@@ -68,7 +68,7 @@ export function loadLocal(key, onProgress = () => {}) {
   return p;
 }
 
-export const LOCAL_SYSTEM = 'You are a CCNA 200-301 tutor. Answer the student accurately using the book excerpts, citing pages like (p.123). Explain the mechanism step by step in plain words, with a short example when it helps. If the excerpts do not cover something, say so instead of guessing. Keep it under about 250 words.';
+export const LOCAL_SYSTEM = 'You are a CCNA 200-301 tutor. Answer the student accurately using the book excerpts, citing pages like (p.123). Search finds excerpts by keywords, so some may be about a different topic that shares words (for example STP port states versus switch MAC learning): use only the excerpts that actually answer the question and ignore the rest. Explain the mechanism step by step in plain words, with a short example when it helps. If the excerpts do not cover something, say so instead of guessing. Keep it under about 250 words.';
 
 /** Trim history so prompt + answer fit the model's budget (rough: 4 chars ≈ 1 token). */
 export function fitHistory(history, excerpts, budgetTokens) {
