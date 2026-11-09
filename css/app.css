@@ -1112,3 +1112,8 @@ label.stack { display: flex; flex-direction: column; gap: 4px; margin: 10px 0; }
 }
 .msg { scroll-margin-bottom: calc(var(--nav-h) + env(safe-area-inset-bottom) + 110px); }
 @media (min-width: 1024px) { .msg { scroll-margin-bottom: 120px; } }
+.model-list { display: flex; flex-direction: column; gap: 8px; margin: 8px 0 10px; }
+.model-row { display: flex; gap: 10px; align-items: flex-start; padding: 10px 12px; border: 1px solid var(--line); border-radius: 14px; cursor: pointer; background: var(--surface); }
+.model-row.on { border-color: color-mix(in srgb, var(--accent) 55%, var(--line)); background: color-mix(in srgb, var(--accent) 7%, var(--surface)); }
+.model-row input { margin-top: 3px; accent-color: var(--accent); width: 18px; height: 18px; flex: none; }
+.chat-seg button { flex: 1; white-space: nowrap; }

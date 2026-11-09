@@ -10,6 +10,7 @@ import { words, ruleCues } from '../cuegen.js';
 import { bankAdd } from '../cuebank.js';
 import { currentTopic, topicTitle } from '../sync.js';
 import { askTutor, tutorKey, TUTOR_MODEL } from '../tutor.js';
+import { askLocal, localKey, localReady, LOCAL_MODELS } from '../localllm.js';
 import { cloudOn, pdfUrl, syncLibrary } from '../cloud.js';
 import { buzz } from '../gestures.js';
 
@@ -39,8 +40,9 @@ function ensureThread() {
 const label = x => (typeof x.p === 'number' ? `${x.name} p.${x.p}` : `${x.name} · ${x.p}`);
 
 export function render(root) {
-  let engine = db().settings.chatEngine === 'claude' && tutorKey() ? 'claude' : 'book';
-  let busy = null; // AbortController while Claude is answering
+  const saved = db().settings.chatEngine;
+  let engine = saved === 'claude' && tutorKey() ? 'claude' : saved === 'local' ? 'local' : 'book';
+  let busy = null; // AbortController while a model is answering
   let textOf = new Map(); // "doc:i" → passage text
   const loadText = async () => { const idx = await fullIndex(); textOf = new Map(idx.items.map(it => [`${it.doc}:${it.i}`, it.text])); };
 
@@ -54,11 +56,17 @@ export function render(root) {
   const sendBtn = h('button.btn.chat-send', { 'aria-label': 'Send', onclick: () => (busy ? busy.abort() : send()) }, '↑');
   const seg = h('div.seg.small-seg.chat-seg', {});
   const libNote = h('div.muted.small.chat-lib', {});
+  const engineNote = h('div.muted.small.chat-lib', {});
 
   const drawSeg = () => {
     seg.replaceChildren(
-      h('button' + (engine === 'book' ? '.on' : ''), { onclick: () => setEngine('book') }, '📖 Book · free'),
-      h('button' + (engine === 'claude' ? '.on' : ''), { onclick: () => setEngine('claude') }, '✨ Claude tutor'));
+      h('button' + (engine === 'book' ? '.on' : ''), { onclick: () => setEngine('book'), title: 'Quotes your books. Free, instant, offline.' }, '📖 Book'),
+      h('button' + (engine === 'local' ? '.on' : ''), { onclick: () => setEngine('local'), title: 'An open model on this device. Free and private.' }, '🧠 On-device'),
+      h('button' + (engine === 'claude' ? '.on' : ''), { onclick: () => setEngine('claude'), title: 'Claude via your API key.' }, '✨ Claude'));
+    engineNote.textContent = engine === 'local'
+      ? `${LOCAL_MODELS[localKey()].name} on this device · free · ${localReady(localKey()) ? 'ready' : `downloads ~${(LOCAL_MODELS[localKey()].size / 1000).toFixed(1)} GB once`} · `
+      : engine === 'claude' ? 'Claude tutor · billed to your API key · ' : 'Quotes your books · free · offline · ';
+    engineNote.append(h('a', { href: '#/library' }, 'change'));
   };
   const setEngine = e => {
     if (e === 'claude' && !tutorKey()) {
@@ -89,22 +97,22 @@ export function render(root) {
   const actions = m => h('div.chat-actions', {},
     h('button.btn.tiny.ghost', {
       onclick: () => {
-        const text = m.engine === 'claude' ? m.text : (m.points || []).map(p => p.s).join(' ') + ' ' + (m.src || []).map(x => textOf.get(`${x.doc}:${x.i}`) || '').join(' ');
+        const text = m.engine !== 'book' ? m.text : (m.points || []).map(p => p.s).join(' ') + ' ' + (m.src || []).map(x => textOf.get(`${x.doc}:${x.i}`) || '').join(' ');
         const qs = ruleCues(text, 6);
         const topic = currentTopic();
         const n = bankAdd(qs, { topic, src: `chat: ${m.q || ''}`.slice(0, 80), engine: 'quick' });
         toast(n ? `${n} cue questions saved under ${topicTitle(topic)} (Cue lab)` : 'Those cues are already in your bank');
       },
     }, '✨ Cue questions'),
-    h('button.btn.tiny.ghost', { onclick: () => { navigator.clipboard?.writeText(m.engine === 'claude' ? m.text : (m.points || []).map(p => `• ${p.s} (${label(p)})`).join('\n')).then(() => toast('Copied')); } }, 'Copy'));
+    h('button.btn.tiny.ghost', { onclick: () => { navigator.clipboard?.writeText(m.engine !== 'book' ? m.text : (m.points || []).map(p => `• ${p.s} (${label(p)})`).join('\n')).then(() => toast('Copied')); } }, 'Copy'));
 
   const bubble = m => {
     if (m.role === 'user') return h('div.msg.me', {}, h('div.bubble', {}, m.text));
-    if (m.engine === 'claude') {
+    if (m.engine === 'claude' || m.engine === 'local') {
       return h('div.msg.bot', {},
         h('div.bubble.md', { html: md(m.text || '') }),
         m.error ? h('div.verdict.bad', {}, m.error) : null,
-        h('div.muted.small', {}, `Claude · grounded in ${m.src?.length || 0} passage${m.src?.length === 1 ? '' : 's'}`),
+        h('div.muted.small', {}, `${m.engine === 'local' ? `${LOCAL_MODELS[m.model]?.name || 'On-device model'} · on this device` : 'Claude'} · grounded in ${m.src?.length || 0} passage${m.src?.length === 1 ? '' : 's'}`),
         sources(m.src), actions(m));
     }
     const pts = m.points || [];
@@ -164,32 +172,45 @@ export function render(root) {
       return;
     }
 
-    // Claude: stream into a live bubble, then save
-    const live = h('div.bubble.md', {}, h('span.muted', {}, 'Thinking…'));
-    list.append(h('div.msg.bot', {}, live));
+    // Claude or on-device model: stream into a live bubble, then save
+    const live = h('div.bubble.md', {}, h('span.muted', {}, engine === 'local' && !localReady(localKey()) ? 'Getting the model ready…' : 'Thinking…'));
+    const prog = h('div.bar', { hidden: true }, h('span', { style: { width: '0%' } }));
+    const progLabel = h('div.muted.small', {});
+    list.append(h('div.msg.bot', {}, live, progLabel, prog));
     live.scrollIntoView({ block: 'end' });
     busy = new AbortController();
     sendBtn.textContent = '■'; sendBtn.setAttribute('aria-label', 'Stop');
-    // earlier Claude exchanges, as complete user→assistant pairs exactly as they were sent
     const prior = t.msgs.slice(0, -1);
-    const pairs = [];
-    prior.forEach((m, i) => { const a = prior[i + 1]; if (m.role === 'user' && m.api && a?.engine === 'claude' && a.text && !a.error) pairs.push({ role: 'user', content: m.api }, { role: 'assistant', content: a.text }); });
-    const history = pairs.slice(-16);
     let acc = '';
     let raf = 0;
+    const onText = d => { acc += d; if (!raf) raf = requestAnimationFrame(() => { raf = 0; live.innerHTML = md(acc); live.scrollIntoView({ block: 'end' }); }); };
     try {
-      const res = await askTutor({
-        history, question: q, hits, signal: busy.signal,
-        onText: d => { acc += d; if (!raf) raf = requestAnimationFrame(() => { raf = 0; live.innerHTML = md(acc); live.scrollIntoView({ block: 'end' }); }); },
-      });
-      update(s => {
-        const th = s.chat.threads.find(x => x.id === t.id);
-        th.msgs[th.msgs.length - 1].api = res.content; // the exact user turn sent, so later turns replay it unchanged
-        th.msgs.push({ role: 'assistant', engine: 'claude', model: TUTOR_MODEL, q, text: res.text, src, at: Date.now() });
-      });
+      if (engine === 'local') {
+        const key = localKey();
+        // earlier generated exchanges as plain text (excerpts are only sent for the new question)
+        const history = [];
+        prior.forEach((m, i) => { const a = prior[i + 1]; if (m.role === 'user' && (a?.engine === 'local' || a?.engine === 'claude') && a.text && !a.error) history.push({ role: 'user', content: m.text }, { role: 'assistant', content: a.text }); });
+        const excerpts = hits.slice(0, 4).map(x => `[${typeof x.p === 'number' ? `p.${x.p}` : x.p}] ${x.text}`).join('\n\n');
+        const text = await askLocal({
+          key, history, question: q, excerpts, onText, signal: busy.signal,
+          onProgress: (p, l) => { progLabel.textContent = p >= 1 ? '' : l; prog.hidden = p >= 1; prog.firstChild.style.width = `${Math.round(p * 100)}%`; if (p >= 1) { live.replaceChildren(h('span.muted', {}, 'Thinking…')); drawSeg(); } },
+        });
+        if (busy.signal.aborted) throw Object.assign(new Error('Stopped.'), { name: 'AbortError' });
+        update(s => { s.chat.threads.find(x => x.id === t.id).msgs.push({ role: 'assistant', engine: 'local', model: key, q, text, src, at: Date.now() }); });
+      } else {
+        // earlier Claude exchanges, as complete user→assistant pairs exactly as they were sent
+        const pairs = [];
+        prior.forEach((m, i) => { const a = prior[i + 1]; if (m.role === 'user' && m.api && a?.engine === 'claude' && a.text && !a.error) pairs.push({ role: 'user', content: m.api }, { role: 'assistant', content: a.text }); });
+        const res = await askTutor({ history: pairs.slice(-16), question: q, hits, signal: busy.signal, onText });
+        update(s => {
+          const th = s.chat.threads.find(x => x.id === t.id);
+          th.msgs[th.msgs.length - 1].api = res.content; // the exact user turn sent, so later turns replay it unchanged
+          th.msgs.push({ role: 'assistant', engine: 'claude', model: TUTOR_MODEL, q, text: res.text, src, at: Date.now() });
+        });
+      }
     } catch (e) {
-      const stopped = e?.name === 'AbortError' || /abort/i.test(e?.message || '');
-      update(s => { s.chat.threads.find(x => x.id === t.id).msgs.push({ role: 'assistant', engine: 'claude', q, text: acc, src, error: stopped ? 'Stopped.' : e.message, at: Date.now() }); });
+      const stopped = e?.name === 'AbortError' || /abort|stopped/i.test(e?.message || '');
+      update(s => { s.chat.threads.find(x => x.id === t.id).msgs.push({ role: 'assistant', engine, model: engine === 'local' ? localKey() : TUTOR_MODEL, q, text: acc, src, error: stopped ? 'Stopped.' : e.message, at: Date.now() }); });
     } finally {
       busy = null;
       sendBtn.textContent = '↑'; sendBtn.setAttribute('aria-label', 'Send');
@@ -213,7 +234,7 @@ export function render(root) {
       h('button.icon-btn', { 'aria-label': 'Chat history', title: 'Chats', onclick: history }, '🕘'),
       h('button.icon-btn', { 'aria-label': 'New chat', title: 'New chat', onclick: () => { update(s => { s.chat.cur = null; }); draw(); input.focus(); } }, '＋'),
       h('a.icon-btn', { href: '#/library', 'aria-label': 'Library & AI settings', title: 'Library & AI' }, '⚙')),
-    seg, libNote, list,
+    seg, engineNote, libNote, list,
     h('div.chat-bar', {}, input, sendBtn));
   drawSeg(); drawLib();
   loadText().finally(draw);

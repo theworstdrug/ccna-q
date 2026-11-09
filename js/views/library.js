@@ -5,6 +5,7 @@ import { h, toast } from '../ui.js';
 import { listDocs, importPdf } from '../refs.js';
 import { cloudConfig, setCloudConfig, cloudOn, parseRepo, testCloud, syncLibrary, uploadDoc, removeDoc, lastSync } from '../cloud.js';
 import { tutorKey, setTutorKey, TUTOR_MODEL } from '../tutor.js';
+import { LOCAL_MODELS, localKey, setLocalKey, loadLocal, localReady, hasWebGPU, defaultLocalKey, isPhone } from '../localllm.js';
 
 const fmtKB = n => (n > 1e6 ? `${(n / 1e6).toFixed(1)} MB` : `${Math.round(n / 1e3)} KB`);
 const ago = t => { if (!t) return 'never'; const m = Math.round((Date.now() - t) / 60000); return m < 1 ? 'just now' : m < 60 ? `${m} min ago` : `${Math.round(m / 60)} h ago`; };
@@ -93,6 +94,25 @@ export function render(root) {
   };
   const disconnect = h('button.btn.small.ghost', { onclick: () => { if (confirm('Disconnect this device from the cloud library? Books already here stay.')) { setCloudConfig(null); drawCloud(); } } }, 'Disconnect');
 
+  // ---------- on-device model ----------
+  const gpuNote = h('div.small', {});
+  const localStatus = h('div.muted.small', {});
+  const localBar = h('div.bar', { hidden: true }, h('span', { style: { width: '0%' } }));
+  const modelList = h('div.model-list', {});
+  const drawModels = () => modelList.replaceChildren(...Object.entries(LOCAL_MODELS).map(([k, m]) => h('label.model-row' + (localKey() === k ? '.on' : ''), {},
+    h('input', { type: 'radio', name: 'localmodel', checked: localKey() === k || null, onchange: () => { setLocalKey(k); drawModels(); } }),
+    h('div.grow', {}, h('div.ref-name', {}, m.name, k === defaultLocalKey() ? h('span.cite', {}, ' suggested here') : null),
+      h('div.muted.small', {}, `${(m.size / 1000).toFixed(1)} GB download, once · ${m.note}${localReady(k) ? ' · loaded' : ''}`),
+      isPhone() && m.size > 2000 ? h('div.small.bad-text', {}, 'Too big for a phone browser: it will likely run out of memory.') : null))));
+  hasWebGPU().then(ok => gpuNote.replaceChildren(ok ? h('span', {}, '✓ WebGPU available') : h('span.bad-text', {}, 'No WebGPU in this browser: on-device chat needs Chrome/Edge on a computer or Safari on iOS 26+.')));
+  const preload = h('button.btn.small', {
+    onclick: async () => {
+      preload.disabled = true; localBar.hidden = false;
+      try { await loadLocal(localKey(), (p, l) => { localStatus.textContent = l; localBar.firstChild.style.width = `${Math.round(p * 100)}%`; }); toast(`${LOCAL_MODELS[localKey()].name} is ready`); } catch (err) { localStatus.replaceChildren(h('span.bad-text', {}, err.message)); }
+      preload.disabled = false; localBar.hidden = true; drawModels();
+    },
+  }, 'Download & load now');
+
   // ---------- Claude ----------
   const keyIn = h('input.input', { type: 'password', placeholder: tutorKey() ? '•••••••• (saved)' : 'sk-ant-…', autocomplete: 'off' });
   const keyStatus = h('div.small', {});
@@ -123,6 +143,11 @@ export function render(root) {
         h('div.row.wrap', {}, h('button.btn.small', { onclick: connect }, cfg.repo ? 'Save & test' : 'Connect'), syncBtn, disconnect),
         cloudStatus),
       h('section.panel', {},
+        h('div.panel-head', {}, h('h2', {}, '🧠 On-device model'), h('span.muted.small', {}, 'free · private · offline after download')),
+        h('p.hint', {}, 'Open-weight models from Google that run inside the browser on your GPU, used by Chat\'s On-device mode. Answers are grounded in passages from your books. Small models still make mistakes: check anything surprising against the passages shown under each answer.'),
+        gpuNote, modelList,
+        h('div.row.wrap', {}, preload), localStatus, localBar),
+      h('section.panel', {},
         h('div.panel-head', {}, h('h2', {}, '✨ Claude tutor'), h('span.muted.small', {}, 'optional')),
         h('p.hint', {}, `For in-depth explanations in Chat. Uses your own Anthropic API key (console.anthropic.com → API keys) and is billed to that account, usually a few cents per question. Each question is sent with the matching passages from your books. Without a key, Chat's free Book mode quotes your books directly.`),
         h('label.stack', {}, h('span.muted.small', {}, 'Anthropic API key (stays on this device, not in backups)'), keyIn),
@@ -131,6 +156,6 @@ export function render(root) {
           h('button.btn.small.ghost', { onclick: () => { setTutorKey(''); drawKey(); } }, 'Remove')),
         keyStatus)));
 
-  drawList(); drawCloud(); drawKey();
+  drawList(); drawCloud(); drawKey(); drawModels();
   if (cloudOn() && Date.now() - lastSync() > 10 * 60000) doSync();
 }
