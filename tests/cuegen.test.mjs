@@ -24,3 +24,20 @@ test('built-in suggestions: questions only, on-topic, varied, for every lesson',
   assert.notDeepEqual(ruleCues(t, 6, 0), ruleCues(t, 6, 1), '"More" gives a different set');
   assert.ok(sections(LESSONS.find(l => l.id === 'ospf').body).length >= 3);
 });
+
+test('cue prompt carries key terms and the question mix; clean-up removes the prompt showing through', async () => {
+  const { cuePrompt, polishCues } = await import('../js/cuegen.js');
+  const u = cuePrompt('OSPF routers elect a DR and BDR on each broadcast segment; the highest priority wins.', { background: 'Priority 0 means never DR.' }).at(-1).content;
+  assert.match(u, /Key terms: .*OSPF/);
+  assert.match(u, /what happens if something fails/);
+  assert.ok(u.indexOf('Background facts') < u.indexOf('Text:') && u.indexOf('Text:') < u.indexOf('Write 6 questions'));
+  assert.ok(!/Example/i.test(u), 'no worked example: a 360M model copies it');
+  assert.deepEqual(polishCues([
+    'What does the text say about the transport layer?',
+    'How does the text describe a broadcast storm?',
+    'What does the text say happens when a link fails?',
+    'Why does the DR exist?',
+    'What is the purpose of the text\'s own terms?',
+    'Why does the passage mention hubs?',
+  ]), ['What are the key points about the transport layer?', 'How would you describe a broadcast storm?', 'What happens when a link fails?', 'Why does the DR exist?']);
+});

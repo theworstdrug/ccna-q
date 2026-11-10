@@ -175,7 +175,7 @@ export function render(root) {
   const modelList = h('div.model-list', {});
   const drawModels = async () => {
     const stored = Object.fromEntries(await Promise.all(Object.keys(LOCAL_MODELS).map(async k => [k, await modelStored(k)])));
-    modelList.replaceChildren(...Object.entries(LOCAL_MODELS).map(([k, m]) => h('label.model-row' + (localKey() === k ? '.on' : ''), {},
+    modelList.replaceChildren(...Object.entries(LOCAL_MODELS).filter(([, m]) => !m.cueOnly && !m.mirrorOnly).map(([k, m]) => h('label.model-row' + (localKey() === k ? '.on' : ''), {},
       h('input', { type: 'radio', name: 'localmodel', checked: localKey() === k || null, onchange: () => { setLocalKey(k); drawModels(); } }),
       h('div.grow', {}, h('div.ref-name', {}, m.name, k === defaultLocalKey() ? h('span.cite', {}, ' default') : null),
         h('div.muted.small', {}, `${stored[k] ? '✓ stored on this device' : `${(m.size / 1000).toFixed(1)} GB download, once`}${m.mirror && cloudOn() ? ' · from your books repo' : ''} · ${m.note}${localReady(k) ? ' · loaded' : ''}`)))));

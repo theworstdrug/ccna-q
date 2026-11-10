@@ -5,7 +5,7 @@ import { h } from '../ui.js';
 import { db, update } from '../store.js';
 import { buzz } from '../gestures.js';
 import { ruleCues, modelCues, sections, prose } from '../cuegen.js';
-import { LOCAL_MODELS, localKey, localReady, isPhone } from '../localllm.js';
+import { LOCAL_MODELS, CUE_KEY, localReady } from '../localllm.js';
 import { backgroundFor, asBackground, cite, listDocs, libraryIndex, search } from '../refs.js';
 import { bankAdd, bankList, bankMark, addToNotes, inNotes } from '../cuebank.js';
 import { chapterByN } from '../data/book.js';
@@ -71,7 +71,7 @@ export function cuePanel({ topic, sources, onAdded, heading = '✨ Suggested cue
     refBox.lastChild.replaceChildren(n ? `Use my ${n} reference PDF${n > 1 ? 's' : ''}` : 'Use my reference PDFs (none yet)', ' · ', h('a', { href: '#/library' }, 'manage'));
   };
   const aiInfo = h('div.ai-info', {},
-    h('p.muted.small', {}, `${LOCAL_MODELS[localKey()].name} runs on this device: free, no account, nothing sent anywhere. It is the same model as the chat's AI tutor, downloaded once.`),
+    h('p.muted.small', {}, `${LOCAL_MODELS[CUE_KEY].name} runs on this device: free, no account, nothing sent anywhere. A small model (~${LOCAL_MODELS[CUE_KEY].size} MB, downloaded once) that's good at leading questions, grounded in your books.`),
     h('p.muted.small', {}, 'With reference PDFs on, it reads the most relevant pages first. Small models still slip: keep the questions that make you think.'));
 
   const savedBox = h('details.sug-saved', {});
@@ -117,13 +117,13 @@ export function cuePanel({ topic, sources, onAdded, heading = '✨ Suggested cue
       let qs;
       let used = engine;
       if (engine === 'quick') { qs = ruleCues(src.text, 6, seed); status.textContent = ''; } else {
-        list.replaceChildren(h('p.muted.small', {}, localReady(localKey()) ? 'Thinking…' : 'Getting the model ready…'));
+        list.replaceChildren(h('p.muted.small', {}, localReady(CUE_KEY) ? 'Thinking…' : 'Getting the model ready…'));
         try {
           qs = await modelCues(src.text, {
             max: 6, background: asBackground(hits, src.text),
             onProgress: (p, label) => { status.textContent = label; bar.hidden = p >= 1; bar.firstChild.style.width = `${Math.round(p * 100)}%`; },
           });
-          status.textContent = `${LOCAL_MODELS[localKey()].name} · on this device`;
+          status.textContent = `${LOCAL_MODELS[CUE_KEY].name} · on this device`;
           if (!qs.length) { qs = ruleCues(src.text, 6, seed); used = 'quick'; }
         } catch (e) {
           status.textContent = `The AI model couldn't run here (${e.message || e}). Showing built-in suggestions instead.`;

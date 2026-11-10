@@ -12,7 +12,7 @@ test('long conversations keep the newest complete exchanges within the budget', 
   const chars = kept.reduce((a, m) => a + m.content.length, 0);
   assert.ok(chars / 4 + 1000 + 450 <= 3000 + 200, 'fits the budget');
   assert.deepEqual(fitHistory(hist, 'e'.repeat(20000), 3000), [], 'no room → no history');
-  for (const m of Object.values(LOCAL_MODELS)) assert.ok((m.id.startsWith('onnx-community/') || (m.mirrorOnly && m.mirror)) && m.size > 0 && m.ctx >= 2000, m.id);
+  for (const m of Object.values(LOCAL_MODELS)) assert.ok(/^[\w-]+\/[\w.-]+$/.test(m.id) && (!m.mirrorOnly || m.mirror) && m.size > 0 && m.ctx >= 2000, m.id);
 });
 
 test('mirror fetch serves split model files from the books repo, else falls back', async () => {

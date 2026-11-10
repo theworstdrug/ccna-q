@@ -26,6 +26,12 @@ export const LOCAL_MODELS = {
     mirror: 'models/granite-4.0-1b-lite', mirrorOnly: true,
     note: 'Phone build of Granite 1B: identical answers, lower memory while loading. Needs your books repo connected.',
   },
+  smol: {
+    // the cue model: writes good leading questions, and small enough for any phone
+    id: 'HuggingFaceTB/SmolLM2-360M-Instruct', name: 'SmolLM2 360M', size: 273, ctx: 2048,
+    mirror: 'models/smollm2-360m', weights: 'onnx/model_q4f16.onnx', wasm: true, cueOnly: true,
+    note: 'Hugging Face, Apache-2.0. Writes the AI cue questions on every device.',
+  },
   gemma4: {
     id: 'onnx-community/gemma-4-E2B-it-ONNX', name: 'Gemma 4 E2B', size: 3110, ctx: 6000,
     note: 'Google, Apache-2.0. Faster on a good GPU and writes tighter answers, but scored 4/5 (it followed a misleading passage). Computers with ~4 GB of graphics memory. Downloads from Hugging Face.',
@@ -36,6 +42,8 @@ const KEY = 'ccnaq.localModel';
 /** Phone-sized layout: the AI settings are hidden and the small model is always used. */
 export const isPhone = () => !!globalThis.matchMedia?.('(max-width: 820px) and (pointer: coarse)').matches;
 /** Phones use the low-memory build of Granite 1B (the crash guard still catches a device that runs out). */
+/** Cue questions always come from the small model: it's good at leading questions and fits any phone. */
+export const CUE_KEY = 'smol';
 export const PHONE_KEY = 'granitelite'; // smaller models (350M–700M) all invented facts; this is Granite 1B rebuilt to load with less memory
 export const defaultLocalKey = () => (isPhone() ? PHONE_KEY : 'granite');
 export const localKey = () => {
@@ -59,7 +67,8 @@ export async function hasWebGPU() { return (await adapter()).ok; }
 export async function modelStored(key) {
   try {
     const cache = await caches.open('transformers-cache');
-    return !!(await cache.match(`https://huggingface.co/${LOCAL_MODELS[key].id}/resolve/main/onnx/model_q4f16.onnx_data`));
+    const m = LOCAL_MODELS[key];
+    return !!(await cache.match(`https://huggingface.co/${m.id}/resolve/main/${m.weights || 'onnx/model_q4f16.onnx_data'}`));
   } catch { return false; }
 }
 
@@ -172,21 +181,24 @@ export async function diagnostics(key = localKey()) {
   return [`model ${LOCAL_MODELS[key]?.name}`, `WebGPU ${g.ok ? 'yes' : 'no'}`, `f16 ${g.f16 ? 'yes' : 'no'}`, `stored ${(await modelStored(key)) ? 'yes' : 'no'}`, st && `storage ${st}${persisted ? ' (persistent)' : ''}`, last && `last stage ${last.stage}`].filter(Boolean).join(' · ');
 }
 
-let loaded = null; // { key, tok, model, tf }
-let loading = null;
-export const localReady = key => loaded?.key === key;
+const loadedModels = new Map(); // key → { key, tok, model, tf }
+const loadingModels = new Map(); // key → promise
+export const localReady = key => loadedModels.has(key);
 
 /** Load (downloading on first use) a model. onProgress(0..1, label). */
 export function loadLocal(key = localKey(), onProgress = () => {}, { retry = false } = {}) {
-  if (localReady(key)) return Promise.resolve(loaded);
+  if (localReady(key)) return Promise.resolve(loadedModels.get(key));
   if (!retry && crashedBefore(key)) {
     return Promise.reject(Object.assign(new Error(`Last time, ${LOCAL_MODELS[key].name} ran this device out of memory while starting, and the app was closed. Close other apps and tap Try again, or use Book mode.`), { crashed: true }));
   }
-  if (loading?.key === key) return loading.p;
+  if (loadingModels.has(key)) return loadingModels.get(key);
   const m = LOCAL_MODELS[key];
   const p = (async () => {
     const gpu = await adapter();
-    if (!gpu.ok) throw new Error('This browser has no WebGPU, which the on-device AI needs. Use Chrome or Edge on a computer, or Safari on iOS 26+.');
+    if (!gpu.ok && !m.wasm) throw new Error('This browser has no WebGPU, which the on-device AI needs. Use Chrome or Edge on a computer, or Safari on iOS 26+.');
+    // small models also run without WebGPU (on the CPU, slower)
+    const device = gpu.ok ? 'webgpu' : 'wasm';
+    const dtype = device === 'wasm' ? 'int8' : gpu.f16 ? 'q4f16' : 'q4';
     onProgress(0, 'Starting the AI engine…');
     const tf = await import(TRANSFORMERS_URL);
     tf.env.backends.onnx.wasm.wasmPaths = VENDOR;
@@ -228,7 +240,7 @@ export function loadLocal(key = localKey(), onProgress = () => {}, { retry = fal
         if (l < t) onProgress(Math.min(0.99, l / t), stored || fromRepo ? `Loading ${m.name} from this device… ${Math.round((l / t) * 100)}%` : `Downloading ${m.name} · ${Math.round(l / 1e6)} / ${Math.round(t / 1e6)} MB (once)`);
       }
       // every file is in: from here the device builds the model on its GPU (the memory-hungry part)
-      if (!prepared && Object.keys(files).some(f => f.endsWith('.onnx_data')) && Object.values(files).every(([l, t]) => l >= t)) {
+      if (!prepared && Object.keys(files).some(f => /\.onnx(_data)?$/.test(f)) && Object.values(files).every(([l, t]) => l >= t)) {
         prepared = true;
         setGuard({ key, stage: 'prepare', at: Date.now() });
         onProgress(0.995, `Preparing ${m.name} on this device's GPU… (the first time can take a minute)`);
@@ -243,25 +255,27 @@ export function loadLocal(key = localKey(), onProgress = () => {}, { retry = fal
       tok = await Promise.race([tf.AutoTokenizer.from_pretrained(m.id, { progress_callback }), failed]);
       // AutoModelForCausalLM loads only the text parts (no vision/audio encoders);
       // q4f16 needs the GPU's half-precision support, otherwise q4 (bigger, from Hugging Face)
-      model = await Promise.race([tf.AutoModelForCausalLM.from_pretrained(m.id, { device: 'webgpu', dtype: gpu.f16 ? 'q4f16' : 'q4', progress_callback }), failed]);
+      model = await Promise.race([tf.AutoModelForCausalLM.from_pretrained(m.id, { device, dtype, progress_callback }), failed]);
     } finally { clearInterval(iv); tf.env.fetch = inner; mirrorBytes = null; }
     setGuard(null);
     onProgress(1, `${m.name} ready`);
     if (!(await modelStored(key))) console.warn(`${m.name} loaded but was not stored; it will download again next time`);
-    if (loaded?.model) await loaded.model.dispose?.();
-    loaded = { key, tok, model, tf };
-    return loaded;
+    // a phone can't hold two models: let the other one go
+    if (isPhone()) for (const [k, v] of loadedModels) { await v.model.dispose?.(); loadedModels.delete(k); }
+    const entry = { key, tok, model, tf };
+    loadedModels.set(key, entry);
+    return entry;
   })().catch(e => {
     if (!e.crashed) setGuard(null);
     if (!(e instanceof Error) || !e.message) e = new Error(`The model couldn't start on this device (${String(e?.message ?? e ?? 'unknown error')}).`);
     throw e;
-  }).finally(() => { loading = null; });
-  loading = { key, p };
+  }).finally(() => { loadingModels.delete(key); });
+  loadingModels.set(key, p);
   return p;
 }
 
 /** Generate a reply to chat messages. Streams into onText; stops when signal aborts. */
-export async function localGenerate({ key = localKey(), messages, maxNewTokens = 600, onText, onProgress, signal }) {
+export async function localGenerate({ key = localKey(), messages, maxNewTokens = 600, repetitionPenalty = 1.05, onText, onProgress, signal }) {
   const { tok, model, tf } = await loadLocal(key, onProgress);
   const inputs = tok.apply_chat_template(messages, { add_generation_prompt: true, enable_thinking: false, return_dict: true });
   let text = '';
@@ -270,7 +284,7 @@ export async function localGenerate({ key = localKey(), messages, maxNewTokens =
   stopping._call = ids => ids.map(() => !!signal?.aborted);
   const criteria = new tf.StoppingCriteriaList();
   criteria.push(stopping);
-  await model.generate({ ...inputs, max_new_tokens: maxNewTokens, do_sample: false, repetition_penalty: 1.05, streamer, stopping_criteria: criteria });
+  await model.generate({ ...inputs, max_new_tokens: maxNewTokens, do_sample: false, repetition_penalty: repetitionPenalty, streamer, stopping_criteria: criteria });
   return text.trim();
 }
 
