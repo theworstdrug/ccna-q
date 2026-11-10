@@ -1141,3 +1141,12 @@ ul.dropped s { opacity: .65; }
    message bar would slide out of reach) */
 body[data-view="chat"] #main, body[data-view="library"] #main, body[data-view="cues"] #main { overflow-x: clip; }
 .chat-list, .msg, .bubble, .src-head, .ref-name { min-width: 0; max-width: 100%; overflow-wrap: anywhere; }
+/* challenges */
+.ch-meta { margin-bottom: 6px; }
+.ch-kind { font-weight: 700; font-size: .85rem; }
+.ch-hints { margin: 8px 0; padding-left: 1.3em; display: flex; flex-direction: column; gap: 6px; font-size: .92rem; }
+.ch-hints li { background: color-mix(in srgb, #f5b301 10%, var(--surface)); border-radius: 10px; padding: 6px 10px; }
+.ch-done { margin: 10px 0; padding: 10px 12px; border-radius: 12px; background: color-mix(in srgb, var(--good, #2a9d55) 10%, var(--surface)); }
+.ch-done p { margin: 0 0 6px; }
+.ch-actions { margin-top: 8px; }
+.challenge-card { display: block; margin-bottom: 12px; border: 1px solid color-mix(in srgb, var(--accent) 35%, var(--glass-border)); background: color-mix(in srgb, var(--accent) 8%, var(--glass-strong)); }

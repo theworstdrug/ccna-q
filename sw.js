@@ -13,7 +13,7 @@ const FILES = [
   './js/views/today.js', './js/views/book.js', './js/views/read.js', './js/views/review.js', './js/views/subnet.js',
   './js/views/drill.js', './js/views/quiz.js', './js/views/notes.js', './js/views/notebook.js', './js/views/spreadview.js', './js/views/anki.js', './js/views/cues.js', './js/views/cuepanel.js', './js/views/chat.js', './js/views/reminders.js', './js/views/library.js', './js/views/lab.js', './js/views/plan.js',
   './docs/notebook-guide.pdf',
-  './js/sim/net.js', './js/sim/engine.js', './js/sim/cli.js', './js/sim/labs.js',
+  './js/sim/net.js', './js/sim/engine.js', './js/sim/cli.js', './js/sim/labs.js', './js/sim/challenges.js',
 ];
 
 self.addEventListener('install', e => {

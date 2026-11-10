@@ -6,6 +6,21 @@ import { db, update } from '../store.js';
 import { Net, PORTS, shortIf } from '../sim/engine.js';
 import { cliFor } from '../sim/cli.js';
 import { LABS, labById } from '../sim/labs.js';
+import { CHALLENGES, instance as challengeInstance, newSeed } from '../sim/challenges.js';
+
+// ---------- challenges (word problems) share the lab's canvas; their ids look like "ch:vlan-split" ----------
+const chalState = id => db().labs.chal?.[id.slice(3)] || null;
+function getLab(id) {
+  if (!id?.startsWith('ch:')) return labById(id);
+  const type = id.slice(3);
+  if (!CHALLENGES.some(c => c.id === type)) return null;
+  let st = chalState(id);
+  if (!st) { st = { seed: newSeed(), hints: 0, checks: 0, started: Date.now() }; update(x => { x.labs.chal = { ...(x.labs.chal || {}), [type]: st }; }); }
+  const c = challengeInstance(type, st.seed);
+  return { ...c, id, challenge: true, brief: c.story, checks: c.goals };
+}
+const setChal = (id, patch) => update(x => { const t = id.slice(3); x.labs.chal = { ...(x.labs.chal || {}), [t]: { ...(x.labs.chal?.[t] || {}), ...patch } }; });
+const stars = n => '★'.repeat(n) + '☆'.repeat(3 - n);
 import { isIp, ipToInt, intToIp, maskToPrefix, prefixToMask } from '../sim/net.js';
 import { buzz } from '../gestures.js';
 
@@ -50,7 +65,7 @@ let terms = new Map(); // devId -> { cli, lines, hist, hi }
 
 export function render(root, [param]) {
   const st = db();
-  let labId = param && labById(param) ? param : (st.labs.current && labById(st.labs.current) ? st.labs.current : 'hello');
+  let labId = param && getLab(param) ? param : (st.labs.current && getLab(st.labs.current) ? st.labs.current : 'hello');
   let net = load(labId);
   let mode = 'select'; // select | cable | delete
   let cableFrom = null;
@@ -59,11 +74,11 @@ export function render(root, [param]) {
   let view = { x: 0, y: 0, w: 520, h: 380 };
 
   terms = new Map();
-  if (param && labById(param)) update(x => { x.labs.current = param; });
+  if (param && getLab(param)) update(x => { x.labs.current = param; });
 
   function load(id) {
     const saved = db().labs.topos[id];
-    return saved ? new Net(saved) : labById(id).make();
+    return saved ? new Net(saved) : getLab(id).make();
   }
 
   let saveT = null;
@@ -79,8 +94,10 @@ export function render(root, [param]) {
   const animG = s('g');
   svg.append(linkG, devG, animG);
 
-  const labSel = h('select.input.lab-select', { onchange: e => switchLab(e.target.value), 'aria-label': 'Choose lab' },
-    LABS.map(l => h('option', { value: l.id, selected: l.id === labId }, `${db().labs.done?.[l.id] ? '✓ ' : ''}${l.title}`)));
+  const chalLabel = c => `${db().labs.chalDone?.[c.id] ? '✓ ' : ''}${c.kind === 'ticket' ? '🎫' : '🧩'} ${c.title} ${stars(c.level)}`;
+  const labSel = h('select.input.lab-select', { onchange: e => switchLab(e.target.value), 'aria-label': 'Choose lab or challenge' },
+    h('optgroup', { label: 'Guided labs' }, LABS.map(l => h('option', { value: l.id, selected: l.id === labId }, `${db().labs.done?.[l.id] ? '✓ ' : ''}${l.title}`))),
+    h('optgroup', { label: 'Challenges: figure it out' }, CHALLENGES.map(c => h('option', { value: `ch:${c.id}`, selected: `ch:${c.id}` === labId }, chalLabel(c)))));
 
   const modeBtns = {};
   const tool = (id, icon, label) => {
@@ -144,7 +161,7 @@ export function render(root, [param]) {
 
   function resetLab() {
     if (!confirm('Reset this lab to its starting state? Your config on it will be lost.')) return;
-    net = labById(labId).make();
+    net = getLab(labId).make();
     terms = new Map();
     lastChecks = null;
     save();
@@ -568,9 +585,10 @@ export function render(root, [param]) {
 
   // ---------- objectives ----------
   function drawObjectives() {
-    const lab = labById(labId);
+    const lab = getLab(labId);
     const done = lastChecks ? lastChecks.filter(Boolean).length : null;
-    objCount.textContent = lab.checks.length ? (done === null ? `${lab.checks.length} objectives` : `${done}/${lab.checks.length} ✓`) : '';
+    objCount.textContent = lab.checks.length ? (done === null ? `${lab.checks.length} ${lab.challenge ? 'goals' : 'objectives'}` : `${done}/${lab.checks.length} ✓`) : '';
+    if (lab.challenge) return drawChallenge(lab);
     objBody.replaceChildren(
       h('div.brief', { html: md(lab.brief) }),
       lab.checks.length ? h('ul.objs', {}, lab.checks.map(([text], i) => h('li' + (lastChecks ? (lastChecks[i] ? '.pass' : '.fail') : ''), {},
@@ -578,21 +596,73 @@ export function render(root, [param]) {
       lab.checks.length ? h('button.btn.small', { onclick: runChecks }, 'Check objectives') : null);
   }
 
+  // A word problem: the story and goals, but no commands. Hints unlock one at a time; the model
+  // solution (and, for tickets, what was broken) only after solving or giving up.
+  function drawChallenge(lab) {
+    const st = chalState(labId) || {};
+    const solved = !!st.solvedAt, gaveUp = !!st.gaveUp;
+    const shown = Math.min(st.hints || 0, lab.hints.length);
+    const mins = Math.max(1, Math.round(((st.solvedAt || Date.now()) - (st.started || Date.now())) / 60000));
+    const solution = h('details.ch-solution', { open: gaveUp || null }, h('summary', {}, 'Model solution'),
+      h('pre.code', {}, Object.entries(lab.solution).map(([dev, cmds]) => `! ${dev}\n${cmds.filter(c => !['en', 'conf t', 'end'].includes(c)).join('\n')}`).join('\n\n')));
+    objBody.replaceChildren(...[
+      h('div.ch-meta', {}, h('span.ch-kind', {}, lab.kind === 'ticket' ? '🎫 Troubleshooting ticket' : '🧩 Build challenge'), h('span.muted.small', {}, ` · ${lab.domain} · ${stars(lab.level)}`)),
+      h('div.brief', { html: md(lab.story) }),
+      h('div.muted.small', {}, 'Goals (how you get there is up to you):'),
+      h('ul.objs', {}, lab.checks.map(([text], i) => h('li' + (lastChecks ? (lastChecks[i] ? '.pass' : '.fail') : ''), {}, h('span.oi', {}, lastChecks ? (lastChecks[i] ? '✓' : '✗') : '○'), text))),
+      shown ? h('ol.ch-hints', {}, lab.hints.slice(0, shown).map(t => h('li', { html: md(t) }))) : null,
+      (solved || gaveUp) ? h('div.ch-done', {},
+        h('p', {}, solved ? `🎉 Solved in ${st.checks || 1} check${st.checks === 1 ? '' : 's'}, ${shown} hint${shown === 1 ? '' : 's'}, ~${mins} min.` : 'Here\'s how it was meant to go:'),
+        h('div', { html: md(lab.explain) }), solution) : null,
+      h('div.row.wrap.ch-actions', {},
+        h('button.btn.small', { onclick: runChecks }, 'Check my work'),
+        !(solved || gaveUp) && shown < lab.hints.length ? h('button.btn.small.ghost', { onclick: () => { setChal(labId, { hints: shown + 1 }); drawObjectives(); } }, `💡 Hint ${shown + 1}/${lab.hints.length}`) : null,
+        h('button.btn.small.ghost', { onclick: newVariant }, '🎲 New variant'),
+        !(solved || gaveUp) ? h('button.btn.small.ghost', { onclick: () => { if (!confirm('Show the model solution? This counts as giving up on this variant.')) return; setChal(labId, { gaveUp: true }); drawObjectives(); } }, 'Give up') : null),
+    ].filter(Boolean));
+  }
+
+  function newVariant() {
+    const st = chalState(labId);
+    if (st && !st.solvedAt && !st.gaveUp && st.checks && !confirm('Start a new variant? Your work on this one will be lost.')) return;
+    update(x => { delete x.labs.topos[labId]; });
+    setChal(labId, { seed: newSeed(), hints: 0, checks: 0, started: Date.now(), solvedAt: null, gaveUp: false });
+    net = getLab(labId).make();
+    terms = new Map();
+    lastChecks = null;
+    save();
+    drawObjectives();
+    fit();
+    toast('New variant: different names, numbers' + (getLab(labId).kind === 'ticket' ? ' and faults' : ''));
+  }
+
   function runChecks() {
-    const lab = labById(labId);
+    const lab = getLab(labId);
     if (!lab.checks.length) { toast('Sandbox has no objectives'); return; }
     lastChecks = lab.checks.map(([, f]) => { try { return !!f(net); } catch { return false; } });
     obj.open = true;
+    const n = lastChecks.filter(Boolean).length;
+    const all = n === lastChecks.length;
+    if (lab.challenge) {
+      const st = chalState(labId) || {};
+      setChal(labId, { checks: (st.checks || 0) + 1, ...(all && !st.solvedAt && !st.gaveUp ? { solvedAt: Date.now() } : {}) });
+      if (all && !st.solvedAt && !st.gaveUp) {
+        update(x => { x.labs.chalDone = { ...(x.labs.chalDone || {}), [labId.slice(3)]: (x.labs.chalDone?.[labId.slice(3)] || 0) + 1 }; x.plan.daily[todayKey()] = { ...(x.plan.daily[todayKey()] || {}), lab: true }; });
+        const c = CHALLENGES.find(x => `ch:${x.id}` === labId);
+        labSel.querySelector(`option[value="${labId}"]`).textContent = chalLabel(c);
+      }
+    }
     drawObjectives();
     draw();
     save();
-    const n = lastChecks.filter(Boolean).length;
-    if (n === lastChecks.length) {
-      update(x => { x.labs.done = { ...(x.labs.done || {}), [labId]: Date.now() }; x.plan.daily[todayKey()] = { ...(x.plan.daily[todayKey()] || {}), lab: true }; });
+    if (all) {
       buzz(30);
-      toast('🎉 Lab complete!');
-      labSel.querySelector(`option[value="${labId}"]`).textContent = `✓ ${lab.title}`;
-    } else toast(`${n}/${lastChecks.length} objectives met`);
+      if (!lab.challenge) {
+        update(x => { x.labs.done = { ...(x.labs.done || {}), [labId]: Date.now() }; x.plan.daily[todayKey()] = { ...(x.plan.daily[todayKey()] || {}), lab: true }; });
+        labSel.querySelector(`option[value="${labId}"]`).textContent = `✓ ${lab.title}`;
+      }
+      toast(lab.challenge ? '🎉 Solved! See what was going on below.' : '🎉 Lab complete!');
+    } else toast(`${n}/${lastChecks.length} ${lab.challenge ? 'goals' : 'objectives'} met${lab.challenge ? '. Keep going' : ''}`);
   }
 
   setMode('select');

@@ -10,7 +10,7 @@ export function script(net, name, cmds) {
   for (const c of cmds) cli.exec(c);
 }
 
-function build({ devices, links, setup = {} }) {
+export function build({ devices, links, setup = {} }) {
   const net = new Net();
   for (const [type, name, x, y] of devices) net.addDevice(type, x, y, name);
   for (const [a, pa, b, pb] of links) net.connect(net.byName(a).id, pa, net.byName(b).id, pb);

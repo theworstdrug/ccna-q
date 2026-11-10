@@ -3,6 +3,7 @@
 import { h } from '../ui.js';
 import { db, update } from '../store.js';
 import { DRILLS, checkAnswer } from '../drills.js';
+import { CHALLENGES } from '../sim/challenges.js';
 import { keypad } from '../keypad.js';
 import { buzz, swipe } from '../gestures.js';
 import { shake, pop, bump } from '../motion.js';
@@ -27,6 +28,11 @@ function hub(root) {
   root.append(
     h('header.view-head', {}, h('h1', {}, 'Drills')),
     h('p.hint', {}, 'Short, tap-only practice for the facts the book expects you to know cold. Aim for streaks.'),
+    h('a.drill-card.challenge-card', { href: '#/lab/ch:ticket-net' },
+      h('div.drill-ch', {}, 'Lab'),
+      h('div.drill-title', {}, '🧩 Network challenges'),
+      h('div.muted.small', {}, 'Word problems and help-desk tickets in the lab. No steps given: build or troubleshoot it yourself, with hints if you need them.'),
+      h('div.drill-stat', {}, (() => { const n = Object.keys(db().labs.chalDone || {}).length; return n ? `${n}/${CHALLENGES.length} solved` : `${CHALLENGES.length} challenges`; })())),
     h('div.drill-grid', {}, Object.entries(DRILLS).map(([id, d]) => {
       const s = statFor(id);
       return h('a.drill-card', { href: d.href || `#/drills/${id}` },
