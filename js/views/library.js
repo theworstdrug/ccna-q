@@ -2,7 +2,7 @@
 // the on-device AI model. On phones the AI settings are hidden: the small model is always used.
 
 import { h, toast, sheet } from '../ui.js';
-import { listDocs, importPdf } from '../refs.js';
+import { listDocs, importPdf, bookLabel } from '../refs.js';
 import { cloudConfig, setCloudConfig, cloudOn, parseRepo, testCloud, syncLibrary, uploadDoc, removeDoc, lastSync, DEFAULT_REPO } from '../cloud.js';
 import { fetchVault, unlock, publishVault, removeVault, makePassphrase, strengthBits, MIN_BITS, APP_REPO } from '../vault.js';
 import { LOCAL_MODELS, localKey, setLocalKey, loadLocal, localReady, hasWebGPU, defaultLocalKey, isPhone, modelStored } from '../localllm.js';
@@ -43,7 +43,7 @@ export function render(root) {
     try { docs = await listDocs(); } catch { listEl.replaceChildren(h('p.muted.small', {}, 'This browser is blocking local storage (private mode?).')); return; }
     listEl.replaceChildren(...(docs.length ? docs.map(d => h('div.ref-row', {},
       h('div.ref-ico', {}, 'PDF'),
-      h('div.grow', {}, h('div.ref-name', {}, d.name),
+      h('div.grow', {}, h('div.ref-name', {}, bookLabel(d.name)),
         h('div.muted.small', {}, [`${d.pages} pages`, `${d.chunks.length} passages`, d.size ? fmtKB(d.size) : null, d.cloud ? (d.pdf ? '☁ text + PDF' : '☁ text') : 'this device only'].filter(Boolean).join(' · '))),
       h('a.btn.small.ghost', { href: '#/cues' }, 'Cues'),
       h('button.icon-btn.tiny', {
@@ -175,7 +175,7 @@ export function render(root) {
   const modelList = h('div.model-list', {});
   const drawModels = async () => {
     const stored = Object.fromEntries(await Promise.all(Object.keys(LOCAL_MODELS).map(async k => [k, await modelStored(k)])));
-    modelList.replaceChildren(...Object.entries(LOCAL_MODELS).filter(([, m]) => !m.cueOnly && !m.mirrorOnly).map(([k, m]) => h('label.model-row' + (localKey() === k ? '.on' : ''), {},
+    modelList.replaceChildren(...Object.entries(LOCAL_MODELS).filter(([, m]) => !m.mirrorOnly).map(([k, m]) => h('label.model-row' + (localKey() === k ? '.on' : ''), {},
       h('input', { type: 'radio', name: 'localmodel', checked: localKey() === k || null, onchange: () => { setLocalKey(k); drawModels(); } }),
       h('div.grow', {}, h('div.ref-name', {}, m.name, k === defaultLocalKey() ? h('span.cite', {}, ' default') : null),
         h('div.muted.small', {}, `${stored[k] ? '✓ stored on this device' : `${(m.size / 1000).toFixed(1)} GB download, once`}${m.mirror && cloudOn() ? ' · from your books repo' : ''} · ${m.note}${localReady(k) ? ' · loaded' : ''}`)))));

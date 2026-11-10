@@ -8,6 +8,8 @@
 // keeps them in its cache, so they download once per device.
 
 import { cloudOn, ghRaw } from './cloud.js';
+import { keyPoints } from './refs.js';
+import { review } from './guard.js';
 
 const VENDOR = new URL('./vendor/transformers-4.3.1/', import.meta.url).href;
 export const TRANSFORMERS_URL = `${VENDOR}transformers.min.js`;
@@ -29,8 +31,8 @@ export const LOCAL_MODELS = {
   smol: {
     // the cue model: writes good leading questions, and small enough for any phone
     id: 'HuggingFaceTB/SmolLM2-360M-Instruct', name: 'SmolLM2 360M', size: 273, ctx: 2048,
-    mirror: 'models/smollm2-360m', weights: 'onnx/model_q4f16.onnx', wasm: true, cueOnly: true,
-    note: 'Hugging Face, Apache-2.0. Writes the AI cue questions on every device.',
+    mirror: 'models/smollm2-360m', weights: 'onnx/model_q4f16.onnx', wasm: true, small: true,
+    note: 'Hugging Face, Apache-2.0. Small and quick: writes the AI cue questions everywhere and answers on phones. Every answer is checked against your books before you see it.',
   },
   gemma4: {
     id: 'onnx-community/gemma-4-E2B-it-ONNX', name: 'Gemma 4 E2B', size: 3110, ctx: 6000,
@@ -41,10 +43,10 @@ export const LOCAL_MODELS = {
 const KEY = 'ccnaq.localModel';
 /** Phone-sized layout: the AI settings are hidden and the small model is always used. */
 export const isPhone = () => !!globalThis.matchMedia?.('(max-width: 820px) and (pointer: coarse)').matches;
-/** Phones use the low-memory build of Granite 1B (the crash guard still catches a device that runs out). */
+/** Phones answer with SmolLM (Granite 1B doesn't fit an iPhone's memory for web apps). */
 /** Cue questions always come from the small model: it's good at leading questions and fits any phone. */
 export const CUE_KEY = 'smol';
-export const PHONE_KEY = 'granitelite'; // smaller models (350M–700M) all invented facts; this is Granite 1B rebuilt to load with less memory
+export const PHONE_KEY = 'smol'; // phones: SmolLM restates your books and every sentence is checked // smaller models (350M–700M) all invented facts; this is Granite 1B rebuilt to load with less memory
 export const defaultLocalKey = () => (isPhone() ? PHONE_KEY : 'granite');
 export const localKey = () => {
   if (isPhone()) return PHONE_KEY;
@@ -303,6 +305,37 @@ export function fitHistory(history, excerpts, budgetTokens) {
     out.unshift(...pair);
   }
   return out;
+}
+
+const SMALL_SYSTEM = 'You are a CCNA study assistant. Use only facts stated in the numbered excerpts. Never add facts from memory. If the excerpts do not answer the question, reply exactly: Your books don\'t cover that.';
+
+/**
+ * Draft an answer, then check every sentence against the passages before anything is shown.
+ * Small models restate the best-matching book sentences; bigger ones explain from whole passages.
+ * Returns { sentences: [{ s, cite }], dropped, fallback, points } — when too little of the draft
+ * holds up, `fallback` is true and `points` are the book's own sentences to show instead.
+ */
+export async function answerChecked({ key = localKey(), question, hits, history = [], onStage = () => {}, onProgress, signal }) {
+  const m = LOCAL_MODELS[key];
+  const points = keyPoints(hits, question, 6);
+  let messages, sources;
+  if (m.small) {
+    sources = points.map(p => ({ text: p.s, name: p.name, p: p.p }));
+    const ex = points.map((p, i) => `[${i + 1}] ${p.s}`).join('\n');
+    messages = [{ role: 'system', content: SMALL_SYSTEM }, { role: 'user', content: `Excerpts:\n${ex}\n\nQuestion: ${question}\n\nAnswer the question by restating the excerpts that answer it, one plain sentence each, in a sensible order (3 to 5 sentences). Keep their facts exactly; do not add anything else. Do not mention the excerpts.` }];
+  } else {
+    const use = hits.slice(0, 4);
+    sources = use.map(x => ({ text: x.text, name: x.name, p: x.p }));
+    const excerpts = use.map(x => `[${typeof x.p === 'number' ? `p.${x.p}` : x.p}] ${x.text}`).join('\n\n');
+    messages = [{ role: 'system', content: LOCAL_SYSTEM }, ...fitHistory(history, excerpts, m.ctx), { role: 'user', content: `Book excerpts:\n${excerpts}\n\nQuestion: ${question}` }];
+  }
+  if (!points.length && m.small) return { sentences: [], dropped: [], fallback: true, points };
+  onStage('draft');
+  const draft = await localGenerate({ key, messages, maxNewTokens: m.small ? 240 : 500, repetitionPenalty: m.small ? 1.1 : 1.05, onProgress, signal });
+  if (signal?.aborted) throw Object.assign(new Error('Stopped.'), { name: 'AbortError' });
+  onStage('check');
+  const rv = review(draft, sources);
+  return { sentences: rv.kept, dropped: rv.dropped, fallback: !rv.ok, points, draft };
 }
 
 /**

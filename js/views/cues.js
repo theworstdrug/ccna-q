@@ -3,7 +3,7 @@
 
 import { h, toast } from '../ui.js';
 import { db, update } from '../store.js';
-import { listDocs } from '../refs.js';
+import { listDocs, bookLabel } from '../refs.js';
 import { bankList } from '../cuebank.js';
 import { topicOptions, topicTitle, topicKey, currentTopic } from '../sync.js';
 import { cuePanel, topicSources, pdfSources, bankRow } from './cuepanel.js';
@@ -29,7 +29,7 @@ export function render(root, [arg]) {
     const docs = await listDocs().catch(() => []);
     srcSel.replaceChildren(
       h('option', { value: '' }, 'This topic (lessons, notes, matching PDF pages)'),
-      ...docs.map(d => h('option', { value: d.id, selected: source.doc?.id === d.id || null }, `PDF: ${d.name}`)),
+      ...docs.map(d => h('option', { value: d.id, selected: source.doc?.id === d.id || null }, `PDF: ${bookLabel(d.name)}`)),
       ...db().imports.map(m => h('option', { value: `imp:${m.id}`, selected: source.imp?.id === m.id || null }, `Imported: ${m.title}`)));
     srcSel.onchange = () => {
       const d = docs.find(x => x.id === srcSel.value);
@@ -59,7 +59,7 @@ export function render(root, [arg]) {
     try { docs = await listDocs(); } catch { libList.replaceChildren(h('p.muted.small', {}, 'This browser blocks local storage for files (private mode?).')); return; }
     libList.replaceChildren(...(docs.length ? docs.map(d => h('div.ref-row', {},
       h('div.ref-ico', {}, 'PDF'),
-      h('div.grow', {}, h('div.ref-name', {}, d.name), h('div.muted.small', {}, `${d.pages} pages · ${d.chunks.length} passages · ${fmtKB(d.size)} · ${new Date(d.added).toLocaleDateString()}`)),
+      h('div.grow', {}, h('div.ref-name', {}, bookLabel(d.name)), h('div.muted.small', {}, `${d.pages} pages · ${d.chunks.length} passages · ${fmtKB(d.size)} · ${new Date(d.added).toLocaleDateString()}`)),
       h('button.btn.small.ghost', { onclick: () => { source = { kind: 'pdf', doc: d }; drawSrcSel(); drawPanel(); panelSlot.scrollIntoView({ behavior: 'smooth', block: 'start' }); } }, 'Cues'),
       null))
       : [h('p.muted.small', {}, 'No PDFs yet.')]));

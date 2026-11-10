@@ -102,9 +102,10 @@ test('stemming lets related words meet; key points quote the best sentences', as
   assert.equal(stem('802.1q'), '802.1q');
   assert.deepEqual(words('Switches flooding frames'), ['switch', 'flood', 'frame']);
   const hits = [{ name: 'Book', p: 750, text: 'In OSPF, a DR and BDR must be elected for each broadcast multi-access network. Lunch is at noon today for everyone in the office. S1(config)#router ospf 1 S1(config-router)#network 10.0.0.0 0.255.255.255 area 0' },
-    { name: 'Book', p: 791, text: 'Router priority The priority is an 8-bit value used to aid in the election of the DR and BDR. A. 224.0.0.5 B. 224.0.0.6 C. 224.0.0.9' }];
+    { name: 'Book', p: 791, text: 'Router priority The priority is an 8-bit value used to aid in the election of the DR and BDR.' },
+    { name: 'Book', p: 117, text: 'Which of the following answers is true? a. The DR is elected by the lowest priority. b. The BDR forwards all traffic. c. Every router becomes the DR.' }];
   const kp = keyPoints(hits, 'How does OSPF elect the DR and BDR?');
-  assert.deepEqual(kp.map(k => k.p), [750, 791]);
+  assert.deepEqual(kp.map(k => k.p), [750, 791], 'quiz options are never quoted as facts');
   assert.ok(kp.every(k => !/Lunch|config/.test(k.s)));
 });
 

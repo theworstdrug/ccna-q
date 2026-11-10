@@ -5,11 +5,14 @@
 
 import { h, md, sheet, toast } from '../ui.js';
 import { db, update } from '../store.js';
-import { fullIndex, search, keyPoints, listDocs } from '../refs.js';
+import { fullIndex, search, keyPoints, listDocs, bookLabel } from '../refs.js';
 import { words, ruleCues } from '../cuegen.js';
+import { answerable } from '../guard.js';
+import { termsIn } from '../terms.js';
+import { GLOSSARY } from '../data/glossary.js';
 import { bankAdd } from '../cuebank.js';
 import { currentTopic, topicTitle } from '../sync.js';
-import { askLocal, localKey, localReady, LOCAL_MODELS, isPhone, modelStored, clearCrash, diagnostics, crashedBefore } from '../localllm.js';
+import { answerChecked, localKey, localReady, LOCAL_MODELS, isPhone, modelStored, clearCrash, diagnostics, crashedBefore } from '../localllm.js';
 import { cloudOn, pdfUrl, syncLibrary } from '../cloud.js';
 import { buzz } from '../gestures.js';
 
@@ -65,7 +68,7 @@ export function render(root) {
       h('button' + (engine === 'local' ? '.on' : ''), { onclick: () => setEngine('local'), title: 'An open model on this device. Free and private.' }, '🧠 AI tutor'));
     const m = LOCAL_MODELS[localKey()];
     engineNote.textContent = engine === 'local'
-      ? `${isPhone() ? 'Explains in its own words' : m.name} · on this device · free · ${localReady(localKey()) ? 'ready' : stored ? 'stored on this device' : `downloads ~${(m.size / 1000).toFixed(1)} GB once`}`
+      ? `${isPhone() ? 'Answers from your books, checked sentence by sentence' : `${m.name} · answers checked against your books`} · on this device · free · ${localReady(localKey()) ? 'ready' : stored ? 'stored on this device' : `downloads ~${(m.size / 1000).toFixed(1)} GB once`}`
       : 'Quotes your books · free · offline';
     if (!isPhone() && engine === 'local') engineNote.append(' · ', h('a', { href: '#/library' }, 'change model'));
     if (engine === 'local' && crashedBefore(localKey())) engineNote.append(h('div.bad-text', {}, `⚠ Last time the AI ran out of memory while starting and the app closed. Close other apps, then ask again (or use Book mode).`));
@@ -78,7 +81,7 @@ export function render(root) {
 
   const drawLib = async () => {
     const docs = await listDocs().catch(() => []);
-    libNote.replaceChildren(docs.length ? `Searching ${docs.map(d => d.name).join(', ')} + the app's lessons · ` : 'Searching the app\'s lessons only · ', h('a', { href: '#/library' }, docs.length ? 'library' : 'add your books'));
+    libNote.replaceChildren(docs.length ? `Searching ${docs.map(d => bookLabel(d.name)).join(', ')} + the app's lessons · ` : 'Searching the app\'s lessons only · ', h('a', { href: '#/library' }, docs.length ? 'library' : 'add your books'));
   };
 
   // ---------- rendering ----------
@@ -92,7 +95,7 @@ export function render(root) {
   const actions = m => h('div.chat-actions', {},
     h('button.btn.tiny.ghost', {
       onclick: () => {
-        const text = m.engine !== 'book' ? m.text : (m.points || []).map(p => p.s).join(' ') + ' ' + (m.src || []).map(x => textOf.get(`${x.doc}:${x.i}`) || '').join(' ');
+        const text = m.checked ? m.checked.map(c => c.s).join(' ') : m.engine !== 'book' ? m.text : (m.points || []).map(p => p.s).join(' ') + ' ' + (m.src || []).map(x => textOf.get(`${x.doc}:${x.i}`) || '').join(' ');
         const qs = ruleCues(text, 6);
         const topic = currentTopic();
         const n = bankAdd(qs, { topic, src: `chat: ${m.q || ''}`.slice(0, 80), engine: 'quick' });
@@ -103,6 +106,19 @@ export function render(root) {
 
   const bubble = m => {
     if (m.role === 'user') return h('div.msg.me', {}, h('div.bubble', {}, m.text));
+    if (m.engine === 'local' && (m.checked || m.fallback || m.scope)) {
+      const name = LOCAL_MODELS[m.model]?.name || 'On-device model';
+      return h('div.msg.bot', {},
+        m.scope ? h('div.bubble', {}, h('p', {}, 'I only answer from your books, and they don\'t cover that. Ask about a CCNA topic: a protocol, a command or a concept.'))
+          : m.fallback ? h('div.bubble', {},
+            h('div.muted.small', {}, '🧐 The AI\'s draft didn\'t hold up against your books, so here\'s what they say:'),
+            (m.points || []).length ? h('ul.points', {}, m.points.map(p => h('li', {}, p.s, ' ', h('span.cite', {}, label(p))))) : h('p', {}, 'Nothing in your books matches that well. Try the protocol or command name.'))
+            : h('div.bubble', {}, h('ul.points.checked', {}, m.checked.map(c => h('li', {}, c.s, c.cite ? [' ', h('span.cite', {}, label(c.cite))] : null)))),
+        m.dropped?.length ? h('details.chat-src', {}, h('summary', {}, `✓ Checked against your books · ${m.dropped.length} sentence${m.dropped.length === 1 ? '' : 's'} removed`),
+          h('ul.dropped', {}, m.dropped.map(d => h('li', {}, h('s', {}, d.s), h('span.muted.small', {}, ` — ${d.why}`))))) : m.checked?.length ? h('div.muted.small', {}, '✓ Every sentence checked against your books') : null,
+        h('div.muted.small', {}, `${name} · on this device`),
+        sources(m.src), m.src?.length ? actions(m) : null);
+    }
     if (m.engine === 'claude' || m.engine === 'local') {
       return h('div.msg.bot', {},
         h('div.bubble.md', { html: md(m.text || '') }),
@@ -159,7 +175,12 @@ export function render(root) {
     if (textOf.size !== idx.items.length) await loadText();
     const docs = await listDocs().catch(() => []);
     const pdfOf = id => docs.find(d => d.id === id)?.pdf || null;
-    const hits = search(idx, query, { k: 4, terms: 16 });
+    let hits = search(idx, query, { k: 4, terms: 16 });
+    if (!hits.length) {
+      // e.g. "What is PortFast, and when is it dangerous?": no passage has every word; use the networking terms
+      const t = termsIn(query).map(id => GLOSSARY.find(g => g.id === id)?.term).filter(Boolean).join(' ');
+      if (t) hits = search(idx, t, { k: 4, terms: 16 });
+    }
     const src = hits.map(x => ({ doc: x.doc, i: x.i, name: x.name, p: x.p, pp: x.pp, ch: x.ch, pdf: pdfOf(x.doc) })); // text is looked up from the index when shown
 
     if (engine === 'book') {
@@ -169,8 +190,14 @@ export function render(root) {
       return;
     }
 
-    // AI tutor: stream into a live bubble, then save
-    const live = h('div.bubble.md', {}, h('span.muted', {}, engine === 'local' && !localReady(localKey()) ? 'Getting the model ready…' : 'Thinking…'));
+    // AI tutor: guard rails first (off-topic questions never reach the model)
+    if (!answerable(hits, query)) {
+      update(s => { s.chat.threads.find(x => x.id === t.id).msgs.push({ role: 'assistant', engine: 'local', model: localKey(), q, scope: true, src: [], at: Date.now() }); });
+      draw();
+      return;
+    }
+    // think first: draft, check every sentence against the books, then show
+    const live = h('div.bubble', {}, h('span.muted', {}, !localReady(localKey()) ? 'Getting the model ready…' : '✍️ Drafting an answer…'));
     const prog = h('div.bar', { hidden: true }, h('span', { style: { width: '0%' } }));
     const progLabel = h('div.muted.small', {});
     list.append(h('div.msg.bot', {}, live, progLabel, prog));
@@ -178,25 +205,26 @@ export function render(root) {
     busy = new AbortController();
     sendBtn.textContent = '■'; sendBtn.setAttribute('aria-label', 'Stop');
     const prior = t.msgs.slice(0, -1);
-    let acc = '';
-    let raf = 0;
-    const onText = d => { acc += d; if (!raf) raf = requestAnimationFrame(() => { raf = 0; live.innerHTML = md(acc); live.scrollIntoView({ block: 'end' }); }); };
     try {
       const key = localKey();
-      // earlier generated exchanges as plain text (excerpts are only sent for the new question)
+      // earlier exchanges as plain text (for the bigger models; the small one answers each question fresh)
       const history = [];
-      prior.forEach((m, i) => { const a = prior[i + 1]; if (m.role === 'user' && a && a.engine !== 'book' && a.text && !a.error) history.push({ role: 'user', content: m.text }, { role: 'assistant', content: a.text }); });
-      const excerpts = hits.slice(0, 4).map(x => `[${typeof x.p === 'number' ? `p.${x.p}` : x.p}] ${x.text}`).join('\n\n');
-      const text = await askLocal({
-        key, history, question: q, excerpts, onText, signal: busy.signal,
-        onProgress: (p, l) => { progLabel.textContent = p >= 1 ? '' : l; prog.hidden = p >= 1; prog.firstChild.style.width = `${Math.round(p * 100)}%`; if (p >= 1) { live.replaceChildren(h('span.muted', {}, 'Thinking…')); stored = true; drawSeg(); } },
+      prior.forEach((m, i) => { const a = prior[i + 1]; if (m.role === 'user' && a && a.engine !== 'book' && (a.text || a.checked) && !a.error) history.push({ role: 'user', content: m.text }, { role: 'assistant', content: a.text || a.checked.map(c => c.s).join(' ') }); });
+      const res = await answerChecked({
+        key, question: q, hits, history, signal: busy.signal,
+        onStage: st => live.replaceChildren(h('span.muted', {}, st === 'draft' ? '✍️ Drafting an answer…' : '🔎 Checking each sentence against your books…')),
+        onProgress: (p, l) => { progLabel.textContent = p >= 1 ? '' : l; prog.hidden = p >= 1; prog.firstChild.style.width = `${Math.round(p * 100)}%`; if (p >= 1) { stored = true; drawSeg(); } },
       });
-      if (busy.signal.aborted) throw Object.assign(new Error('Stopped.'), { name: 'AbortError' });
-      update(s => { s.chat.threads.find(x => x.id === t.id).msgs.push({ role: 'assistant', engine: 'local', model: key, q, text, src, at: Date.now() }); });
+      const points = res.points.map(p => ({ s: p.s, name: p.name, p: p.p, pp: p.pp, doc: p.doc }));
+      update(s => {
+        s.chat.threads.find(x => x.id === t.id).msgs.push(res.fallback
+          ? { role: 'assistant', engine: 'local', model: key, q, fallback: true, points, dropped: res.dropped, src, at: Date.now() }
+          : { role: 'assistant', engine: 'local', model: key, q, checked: res.sentences, dropped: res.dropped, text: res.sentences.map(c => c.s).join(' '), src, at: Date.now() });
+      });
     } catch (e) {
       const diag = await diagnostics().catch(() => '');
       const stopped = e?.name === 'AbortError' || /abort|stopped/i.test(e?.message || '');
-      update(s => { s.chat.threads.find(x => x.id === t.id).msgs.push({ role: 'assistant', engine, model: localKey(), q, text: acc, src, error: stopped ? 'Stopped.' : e.message, retry: !!e.crashed, diag: stopped ? '' : diag, at: Date.now() }); });
+      update(s => { s.chat.threads.find(x => x.id === t.id).msgs.push({ role: 'assistant', engine, model: localKey(), q, text: '', src, error: stopped ? 'Stopped.' : e.message, retry: !!e.crashed, diag: stopped ? '' : diag, at: Date.now() }); });
     } finally {
       busy = null;
       sendBtn.textContent = '↑'; sendBtn.setAttribute('aria-label', 'Send');

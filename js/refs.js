@@ -82,6 +82,28 @@ export function cleanBook(pages) {
   return out;
 }
 
+/**
+ * Quiz pages, answer keys and review questions: their option lines read like facts but are often
+ * deliberately wrong ("learned based on the destination MAC address"). Lammle uses "A. B. C.",
+ * the Cisco Press guides "a. b. c." under "Which of the following…".
+ */
+export function isQuiz(text) {
+  const t = String(text);
+  return (t.match(/(?:^|\s)[A-F]\.\s/g) || []).length >= 3
+    || (t.match(/(?:^|\s)[a-f]\.\s+[A-Z]/g) || []).length >= 3
+    || (t.match(/(?:^|\s)\d{1,2}\.\s[A-F](?:,\s?[A-F])*\.?\s/g) || []).length >= 2
+    || /Which of the following|Do I Know This Already|Answers to (the )?(Review|“Do I Know|"Do I Know)|Review Questions|is (true|false|correct|incorrect) because/i.test(t);
+}
+
+/** A readable book name from a file name: "12381imguf_CiscoPress-CCNA-200-301-Official-Cert-Guide-Volume-1"
+ *  → "CCNA 200-301 Official Cert Guide Vol. 1". */
+export function bookLabel(name) {
+  let s = String(name || '').replace(/\.pdf$/i, '').replace(/^\d+[a-z0-9]*_/i, '').replace(/^(CiscoPress|Cisco Press|Pearson|Sybex|Wiley)[-_ ]+/i, '');
+  s = s.replace(/[_]+/g, ' ').replace(/([A-Za-z])-|-([A-Za-z])/g, (m, a, b) => (a ? `${a} ` : ` ${b}`)).replace(/\s+/g, ' ').trim();
+  s = s.replace(/\bvol(?:ume)?[\s.\-]*(\d+)/i, 'Vol. $1').replace(/\bccna\b/i, 'CCNA');
+  return s.length > 48 ? `${s.slice(0, 46).trim()}…` : s || 'Book';
+}
+
 /** A BM25 index over chunks from any number of documents. */
 export function makeIndex(docs) {
   const items = [];
@@ -90,10 +112,10 @@ export function makeIndex(docs) {
     const tf = new Map();
     for (const x of w) tf.set(x, (tf.get(x) || 0) + 1);
     // quiz pages and answer keys (lots of "A." "B." options or numbered answers) rank lower
-    const quiz = (c.text.match(/(?:^|\s)[A-F]\.\s/g) || []).length >= 3 || (c.text.match(/(?:^|\s)\d{1,2}\.\s[A-F](?:,\s?[A-F])*\.?\s/g) || []).length >= 2;
+    const quiz = isQuiz(c.text);
     // table-of-contents / index text: "Topic 623 Next Topic 625 …"
     const toc = (c.text.match(/[A-Za-z)]\s\d{1,4}\s(?=[A-Z])/g) || []).length >= 5;
-    items.push({ doc: d.id, name: d.name, p: c.p, pp: c.pp, ch: c.ch, i: c.i, text: c.text, len: w.length, tf, boost: toc ? 0.3 : quiz ? 0.55 : 1 });
+    items.push({ doc: d.id, name: bookLabel(d.name), p: c.p, pp: c.pp, ch: c.ch, i: c.i, text: c.text, len: w.length, tf, quiz, boost: toc ? 0.3 : quiz ? 0.4 : 1 });
   }
   const df = new Map();
   for (const it of items) for (const w of it.tf.keys()) df.set(w, (df.get(w) || 0) + 1);
@@ -130,7 +152,7 @@ export function search(index, text, { k = 2, exclude = null, terms = 24, minCove
   // relevant = at least two query words matched, covering enough of the query's weight
   const total = q.reduce((a, [w]) => a + idf(w), 0);
   const strong = scored.filter(x => (x.cover /= total) >= minCover).sort((a, b) => b.s - a.s);
-  return strong.slice(0, k).map(x => ({ doc: x.it.doc, name: x.it.name, p: x.it.p, pp: x.it.pp, ch: x.it.ch, i: x.it.i, text: x.it.text, score: x.s, cover: x.cover }));
+  return strong.slice(0, k).map(x => ({ doc: x.it.doc, name: x.it.name, p: x.it.p, pp: x.it.pp, ch: x.it.ch, quiz: x.it.quiz, i: x.it.i, text: x.it.text, score: x.s, cover: x.cover }));
 }
 
 /**
@@ -156,6 +178,7 @@ export function keyPoints(hits, query, max = 6) {
   const key = new Set(words(query));
   const out = [];
   hits.forEach((x, h) => {
+    if (x.quiz || isQuiz(x.text)) return; // never state a quiz option as a fact
     const sents = x.text.replace(/([.!?])\s+(?=[A-Z0-9(])/g, '$1\u0001').split('\u0001').map(t => t.replace(/^Fi\s?gure\s[\d\s.]+\s*/i, '').trim());
     sents.forEach((t, k) => {
       if (t.length < 40 || t.length > 420) return;
